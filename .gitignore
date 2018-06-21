@@ -2,5 +2,6 @@
 *.pyc
 *.egg-info
 .idea/
+venv3/
 
 xvfb.log
