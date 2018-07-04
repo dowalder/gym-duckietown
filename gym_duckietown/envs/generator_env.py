@@ -289,7 +289,7 @@ class GeneratorEnv(gym.Env):
 
             # If the angle is too far away from the driving direction, retry
             dist, dot_dir, angle = self.get_lane_pos()
-            if angle < -70 or angle > 70:
+            if angle < -45 or angle > 45:  # TODO: original: if angle < -70 or angle > 70:
                 continue
 
             # Found a valid initial pose
