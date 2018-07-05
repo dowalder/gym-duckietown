@@ -33,7 +33,7 @@ class Controller(abc.ABC):
         :param img:
         :return: steering angle
         """
-        raise NotImplemented
+        raise NotImplemented()
 
 
 class RealDataController(Controller):
@@ -47,6 +47,7 @@ class RealDataController(Controller):
         self.v = 0.3
         self.wheel_dist = 0.1
         self.max_v = 1.0
+        self.speed_factor = 1.0 / 0.038
 
         self._transform = torchvision.transforms.Compose([
             torchvision.transforms.ToPILImage(),
@@ -58,8 +59,8 @@ class RealDataController(Controller):
 
     def step(self, img: np.ndarray) -> np.ndarray:
         angle = float(self.cnn(self._transform(img)))
-        vel_left = (self.v + 0.5 * angle * self.wheel_dist) * 2.0
-        vel_right = (self.v - 0.5 * angle * self.wheel_dist) * 2.0
+        vel_left = (self.v + 0.5 * angle * self.wheel_dist) * self.speed_factor
+        vel_right = (self.v - 0.5 * angle * self.wheel_dist) * self.speed_factor
 
         # vel_left = min(self.max_v, max(-self.max_v, vel_left))
         # vel_right = min(self.max_v, max(-self.max_v, vel_right))
@@ -68,7 +69,7 @@ class RealDataController(Controller):
 
 
 def get_controller(args: Any) -> Controller:
-    if args.controller == "real_data":
+    if args.controller == "caffee_copy":
         controller_args = yaml.load(pathlib.Path(args.args).read_text())
         controller = RealDataController(pathlib.Path(controller_args["pkg_path"]),
                                         pathlib.Path(controller_args["model_path"]))
@@ -93,10 +94,10 @@ def main():
 
     env.render()
 
-    num_sequences = 40
+    num_sequences = 1
     num_img_per_seq = 100
     save_path = pathlib.Path(
-        "/home/dominik/dataspace/images/cnn_controller_lane_following/real_data_learned_caffe_copy")
+        "/home/dominik/dataspace/images/cnn_controller_lane_following/sim_data_learned_caffe_copy")
 
     for num_seq in range(num_sequences):
         print("running on sequence: {}".format(num_seq))
@@ -105,7 +106,7 @@ def main():
         obs = env.reset(perturb_factor=0.0)
         img_path = seq_dir / "img_00000.jpg"
 
-        delta_t = 0.1
+        delta_t = 0.033
 
         save_img(img_path, obs)
 
