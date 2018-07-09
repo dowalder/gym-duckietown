@@ -544,6 +544,54 @@ class GeneratorEnv(gym.Env):
 
         return signedDist, dotDir, angle
 
+    def get_next_pos(self):
+        """
+        Get the position we would like to be at next on the bezier curve
+        """
+        i, j = self._get_grid_coords(self.cur_pos)
+
+        # Get the closest point along the right lane's Bezier curve
+        cps = self._get_curve(i, j)
+        t = bezier_closest(cps, self.cur_pos) + 0.1
+        point = bezier_point(cps, t)
+
+    def new_pos(self, action, delta_t, bezier=True) -> float:
+        Vl, Vr = action * self.params.ROBOT_SPEED
+        l = self.wheel_dist
+
+        # If the wheel velocities are the same, then there is no rotation
+        if Vl == Vr:
+            self.cur_pos += delta_t * Vl * self.get_dir_vec()
+
+        # Compute the angular rotation velocity about the ICC (center of curvature)
+        w = (Vr - Vl) / l
+
+        # Compute the distance to the center of curvature
+        r = (l * (Vl + Vr)) / (2 * (Vl - Vr))
+
+        # Compute the rotatio angle for this time step
+        rotAngle = w * delta_t
+
+        # Rotate the robot's position around the center of rotation
+        r_vec = self.get_right_vec()
+        px, py, pz = self.cur_pos
+        cx = px + r * r_vec[0]
+        cz = pz + r * r_vec[2]
+        npx, npz = rotate_point(px, pz, cx, cz, -rotAngle)
+        new_pos = np.array([npx, py, npz])
+
+        # Update the robot's direction angle
+        new_angle = self.cur_angle + rotAngle
+
+        i, j = self._get_grid_coords(self.cur_pos)
+
+        # Get the closest point along the right lane's Bezier curve
+        cps = self._get_curve(i, j)
+        t = bezier_closest(cps, self.cur_pos) + 0.1
+        point = bezier_point(cps, t)
+
+        return np.linalg.norm(point - new_pos)
+
     def _update_pos(self, wheelVels, deltaTime):
         """
         Update the position of the robot, simulating differential drive
@@ -606,6 +654,34 @@ class GeneratorEnv(gym.Env):
             self._drivable_pos(r_pos) and
             self._drivable_pos(f_pos)
         )
+
+    def theoretical_step(self, action, delta_t=0.1) -> float:
+        """
+        Determines the reward from a action without actually performing the action.
+
+        :param action:
+        :param delta_t:
+        :return: reward
+        """
+        last_pos = self.cur_pos
+        last_angle = self.cur_angle
+
+        # Update the robot's position
+        self._update_pos(action * self.params.ROBOT_SPEED * 1, delta_t)
+
+        # If the agent is not in a valid pose (on drivable tiles)
+        if not self._valid_pose():
+            return -10
+
+        # Get the position relative to the right lane tangent
+        dist, dotDir, angle = self.get_lane_pos()
+        reward = 1.0 * dotDir - 10.00 * abs(dist)
+
+        # Reset bot to previous position.
+        self.cur_angle = last_angle
+        self.cur_pos = last_pos
+
+        return reward
 
     def step(self, action, delta_t=0.1):
         self.step_count += 1

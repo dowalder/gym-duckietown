@@ -44,10 +44,10 @@ class RealDataController(Controller):
 
         self.cnn = networks.InitialNet()
         self.cnn.load_state_dict(torch.load(model_path.as_posix()))
-        self.v = 0.3
+        self.v = 0.5
         self.wheel_dist = 0.1
         self.max_v = 1.0
-        self.speed_factor = 1.0 / 0.038
+        self.speed_factor = 1.0
 
         self._transform = torchvision.transforms.Compose([
             torchvision.transforms.ToPILImage(),
@@ -69,7 +69,7 @@ class RealDataController(Controller):
 
 
 def get_controller(args: Any) -> Controller:
-    if args.controller == "caffee_copy":
+    if args.controller == "caffe_copy":
         controller_args = yaml.load(pathlib.Path(args.args).read_text())
         controller = RealDataController(pathlib.Path(controller_args["pkg_path"]),
                                         pathlib.Path(controller_args["model_path"]))
@@ -94,8 +94,8 @@ def main():
 
     env.render()
 
-    num_sequences = 1
-    num_img_per_seq = 100
+    num_sequences = 5
+    num_img_per_seq = 500
     save_path = pathlib.Path(
         "/home/dominik/dataspace/images/cnn_controller_lane_following/sim_data_learned_caffe_copy")
 
@@ -116,12 +116,12 @@ def main():
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img + 1)
 
             action = controller.step(obs)
-            obs, reward, _, _ = env.step(action, delta_t)
+            obs, reward, _, _ = env.step(action * 4, delta_t)  # TODO: remove "* 4"
             save_img(img_path, obs)
 
             info.append({"path": img_path.as_posix(),
                          "action": action.tolist(),
-                         "reward": reward,
+                         "reward": float(reward),
                          "delta_t": delta_t})
 
         info_path = seq_dir.parent / (seq_dir.stem + ".yaml")
