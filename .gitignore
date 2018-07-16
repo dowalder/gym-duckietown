@@ -3,6 +3,7 @@
 *.egg-info
 .idea/
 venv3/
+experiments/demos_zigzag_dists.json
 experiments/demos_loop_obstacles.json
 trained_models/imitate.pt
 

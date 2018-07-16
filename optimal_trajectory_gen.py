@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+This script generates trajectories from which a lane follower can be learned.
+"""
+
 import argparse
 import pathlib
 import random
@@ -9,17 +13,24 @@ import cv2
 
 import numpy as np
 
-from gym_duckietown.envs import GeneratorEnv, Parameters
+from gym_duckietown.envs import GeneratorEnv
 
 
 def save_img(path: pathlib.Path, img):
-    img = np.flip(img, 0)
+    """
+    Saves a RGB image wiht opencv. ATTENTION: if the image was loaded with opencv, it most likely is a BGR image and it
+    can be stored directly with cv2.imwrite.
+    :param path:
+    :param img:
+    """
     img = img[:, :, [2, 1, 0]]
-
     cv2.imwrite(path.as_posix(), img)
 
 
-class ActionFinder:
+class DiscreteActionFinder:
+    """
+    Finds the correct action from a discrete set by trying every action and choosing the one with the highest reward.
+    """
 
     def __init__(self, delta_t=0.1, range=(-1.0, 1.0), resolution=201, v=0.5, wheel_dist=0.1):
         assert isinstance(range, tuple), "got {}".format(range.__class__)
@@ -33,6 +44,12 @@ class ActionFinder:
         self.delta_t = delta_t
 
     def find_action(self, env: GeneratorEnv):
+        """
+        Finds the most rewarding action.
+
+        :param env: simulation environment to test the actions
+        :return:
+        """
         best_action = None
         best_omega = None
         best_reward = -1e6
@@ -50,6 +67,30 @@ class ActionFinder:
             return best_action, best_omega
 
 
+class PurePursuitController:
+    """
+    NOT WORKING
+    """
+
+    def __init__(self, vel=0.4, lookahead=0.1, wheel_dist=0.1):
+        self.v = vel
+        self.wheel_dist = wheel_dist
+        self.lookahead = lookahead
+
+    def step(self, env: GeneratorEnv):
+        x_curr, _, z_curr = env.cur_pos
+        angle = env.cur_angle
+
+        x_goal, _, z_goal = env.lookahead_point(lookahead_dist=self.lookahead)
+        r_goal = -(x_goal - x_curr) * np.sin(angle) + (z_goal - z_curr) * np.cos(angle)
+        curvature = 2 * r_goal / (self.lookahead ** 2)
+        omega = curvature * self.v
+
+        vel_left = self.v + 0.5 * omega * self.wheel_dist
+        vel_right = self.v - 0.5 * omega * self.wheel_dist
+        return np.array([vel_left, vel_right]), omega
+
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -62,13 +103,15 @@ def main():
 
     env.render()
 
-    delta_t = 0.033
-    num_sequences = 3
-    num_img_per_seq = 6000
+    delta_t = 0.1
+    num_sequences = 2
+    num_img_per_seq = 100
     save_path = pathlib.Path(args.tgt_dir)
 
-    action_finder_fast = ActionFinder(delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
-    action_finder_slow = ActionFinder(delta_t=delta_t, range=(-4.0, 4.0), resolution=201, v=0.2)
+    # The faster moving action finder is better to find a starting position (it is more stable to converge), but the
+    # slower action finder provides better training data as it does move more smoothly around curves.
+    action_finder_fast = DiscreteActionFinder(delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
+    action_finder_slow = DiscreteActionFinder(delta_t=delta_t, range=(-4.0, 4.0), resolution=201, v=0.2)
 
     num_seq = 0
     while num_seq < num_sequences:
@@ -100,7 +143,7 @@ def main():
                 env.step(action, delta_t)
                 continue
             else:
-                out = action_finder_slow.find_action(env)
+                out = action_finder_slow.step(env)
                 if out is None:
                     info = None
                     break
@@ -108,7 +151,8 @@ def main():
                     action, omega = out
 
             save_img(img_path, obs)  # action belongs to the old image
-            obs, reward, _, _ = env.step(action, delta_t)
+            wishpoint = env.lookahead_point(0.1)
+            obs, reward, _, _ = env.step(action, delta_t, wishpoint)
 
             info.append({"path": img_path.relative_to(save_path).as_posix(),
                          "action": action.tolist(),

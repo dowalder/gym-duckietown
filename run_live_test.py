@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+"""
+Runs a test for a defined number of runs of defined length. The output are consecutive images of the controller
+navigating the simulation.
+"""
+
 import argparse
 import abc
 import pathlib
@@ -13,11 +18,10 @@ import torchvision
 
 import numpy as np
 
-from gym_duckietown.envs import GeneratorEnv, Parameters
+from gym_duckietown.envs import GeneratorEnv
 
 
 def save_img(path: pathlib.Path, img):
-    img = np.flip(img, 0)
     img = img[:, :, [2, 1, 0]]
 
     cv2.imwrite(path.as_posix(), img)
@@ -36,7 +40,42 @@ class Controller(abc.ABC):
         raise NotImplemented()
 
 
-class RealDataController(Controller):
+class OmegaController(Controller):
+    """
+    Loads the standard net that computes omega.
+    """
+
+    def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
+        sys.path.append(pkg_path.as_posix())
+        import networks
+
+        self.cnn = networks.InitialNet()
+        self.cnn.load_state_dict(torch.load(model_path.as_posix()))
+        self.v = 0.2
+        self.wheel_dist = 0.1
+        self.max_v = 1.0
+        self.speed_factor = 1.0
+
+        self._transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.Resize((80, 160)),
+            torchvision.transforms.Grayscale(),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda img: img.unsqueeze(0))
+        ])
+
+    def step(self, img: np.ndarray) -> np.ndarray:
+        angle = float(self.cnn(self._transform(img)))
+        vel_left = (self.v + 0.5 * angle * self.wheel_dist) * self.speed_factor
+        vel_right = (self.v - 0.5 * angle * self.wheel_dist) * self.speed_factor
+
+        return np.array([vel_left, vel_right])
+
+
+class DirectAction(Controller):
+    """
+    Loads the standard net that computes directly the action (wheel velocities)
+    """
 
     def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
         sys.path.append(pkg_path.as_posix())
@@ -57,21 +96,55 @@ class RealDataController(Controller):
             torchvision.transforms.Lambda(lambda img: img.unsqueeze(0))
         ])
 
-    def step(self, img: np.ndarray) -> np.ndarray:
-        angle = float(self.cnn(self._transform(img)))
-        vel_left = (self.v + 0.5 * angle * self.wheel_dist) * self.speed_factor
-        vel_right = (self.v - 0.5 * angle * self.wheel_dist) * self.speed_factor
+    def step(self, img: np.ndarray):
+        with torch.no_grad():
+            action = self.cnn(self._transform(img))
 
-        # vel_left = min(self.max_v, max(-self.max_v, vel_left))
-        # vel_right = min(self.max_v, max(-self.max_v, vel_right))
+        return np.array(action.squeeze())
 
-        return np.array([vel_left, vel_right])
+
+class DirectActionResnet(Controller):
+    """
+    Loads the resnet that computes directly the action (wheel velocities)
+    """
+
+    def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
+        sys.path.append(pkg_path.as_posix())
+        import networks
+
+        self.cnn = networks.ResnetController()
+        self.cnn.load_state_dict(torch.load(model_path.as_posix(), map_location="cpu"))
+
+        self._transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.Resize((120, 160)),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda img: img.unsqueeze(0))
+        ])
+
+    def step(self, img: np.ndarray):
+        with torch.no_grad():
+            action = self.cnn(self._transform(img))
+        return np.array(action.squeeze())
 
 
 def get_controller(args: Any) -> Controller:
+    """
+    Controller factory.
+    :param args:
+    :return:
+    """
     if args.controller == "caffe_copy":
         controller_args = yaml.load(pathlib.Path(args.args).read_text())
-        controller = RealDataController(pathlib.Path(controller_args["pkg_path"]),
+        controller = OmegaController(pathlib.Path(controller_args["pkg_path"]),
+                                     pathlib.Path(controller_args["model_path"]))
+    elif args.controller == "direct_action":
+        controller_args = yaml.load(pathlib.Path(args.args).read_text())
+        controller = DirectAction(pathlib.Path(controller_args["pkg_path"]),
+                                  pathlib.Path(controller_args["model_path"]))
+    elif args.controller == "resnet":
+        controller_args = yaml.load(pathlib.Path(args.args).read_text())
+        controller = DirectActionResnet(pathlib.Path(controller_args["pkg_path"]),
                                         pathlib.Path(controller_args["model_path"]))
     else:
         raise ValueError("Unknown controller: {}".format(args.controller))
@@ -95,9 +168,8 @@ def main():
     env.render()
 
     num_sequences = 5
-    num_img_per_seq = 500
-    save_path = pathlib.Path(
-        "/home/dominik/dataspace/images/cnn_controller_lane_following/sim_data_learned_caffe_copy")
+    num_img_per_seq = 1500
+    save_path = pathlib.Path("/home/dominik/dataspace/images/cnn_controller_lane_following/test")
 
     for num_seq in range(num_sequences):
         print("running on sequence: {}".format(num_seq))
@@ -106,7 +178,7 @@ def main():
         obs = env.reset(perturb_factor=0.0)
         img_path = seq_dir / "img_00000.jpg"
 
-        delta_t = 0.033
+        delta_t = 0.1
 
         save_img(img_path, obs)
 
@@ -116,7 +188,7 @@ def main():
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img + 1)
 
             action = controller.step(obs)
-            obs, reward, _, _ = env.step(action * 4, delta_t)  # TODO: remove "* 4"
+            obs, reward, _, _ = env.step(action, delta_t)
             save_img(img_path, obs)
 
             info.append({"path": img_path.as_posix(),

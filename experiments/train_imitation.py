@@ -124,6 +124,7 @@ if __name__ == "__main__":
 
     avg_loss = 0
     num_epochs = 2000000
+    display_interval = 500
 
     for epoch in range(1, num_epochs+1):
         optimizer.zero_grad()
@@ -140,8 +141,8 @@ if __name__ == "__main__":
         loss = loss.data[0]
         avg_loss = avg_loss * 0.995 + loss * 0.005
 
-        print('epoch %d, loss=%.3f' % (epoch, avg_loss))
-
+        if epoch % display_interval == 0:
+            print('epoch %d, loss=%.3f' % (epoch, avg_loss))
         #print('gen time: %d ms' % genTime)
         #print('train time: %d ms' % trainTime)
 

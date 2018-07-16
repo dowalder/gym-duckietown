@@ -121,7 +121,7 @@ env = SimpleSimEnv(map_name=args.map_name)
 demos = []
 total_steps = 0
 
-while True:
+for _ in range(1000):
     seed = random.randint(0, 0xFFFFFFFF)
     p, a = gen_trajectory(env, seed, args.demo_len + args.tail_len, args.num_itrs)
 
