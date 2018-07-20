@@ -10,6 +10,7 @@ import abc
 import pathlib
 import sys
 from typing import Any
+import collections
 
 import yaml
 import cv2
@@ -19,6 +20,11 @@ import torchvision
 import numpy as np
 
 from gym_duckietown.envs import GeneratorEnv
+
+DUCKIE_CNN_PATH = "/home/dominik/workspace/duckie_cnn"
+
+sys.path.append(DUCKIE_CNN_PATH)
+import networks
 
 
 def save_img(path: pathlib.Path, img):
@@ -45,15 +51,12 @@ class OmegaController(Controller):
     Loads the standard net that computes omega.
     """
 
-    def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
-        sys.path.append(pkg_path.as_posix())
-        import networks
+    def __init__(self, model_path: pathlib.Path):
 
         self.cnn = networks.InitialNet()
         self.cnn.load_state_dict(torch.load(model_path.as_posix()))
         self.v = 0.2
         self.wheel_dist = 0.1
-        self.max_v = 1.0
         self.speed_factor = 1.0
 
         self._transform = torchvision.transforms.Compose([
@@ -77,16 +80,9 @@ class DirectAction(Controller):
     Loads the standard net that computes directly the action (wheel velocities)
     """
 
-    def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
-        sys.path.append(pkg_path.as_posix())
-        import networks
-
+    def __init__(self, model_path: pathlib.Path):
         self.cnn = networks.InitialNet()
-        self.cnn.load_state_dict(torch.load(model_path.as_posix()))
-        self.v = 0.5
-        self.wheel_dist = 0.1
-        self.max_v = 1.0
-        self.speed_factor = 1.0
+        self.cnn.load_state_dict(torch.load(model_path.as_posix(), map_location="cpu"))
 
         self._transform = torchvision.transforms.Compose([
             torchvision.transforms.ToPILImage(),
@@ -99,7 +95,6 @@ class DirectAction(Controller):
     def step(self, img: np.ndarray):
         with torch.no_grad():
             action = self.cnn(self._transform(img))
-
         return np.array(action.squeeze())
 
 
@@ -108,9 +103,7 @@ class DirectActionResnet(Controller):
     Loads the resnet that computes directly the action (wheel velocities)
     """
 
-    def __init__(self, pkg_path: pathlib.Path, model_path: pathlib.Path):
-        sys.path.append(pkg_path.as_posix())
-        import networks
+    def __init__(self, model_path: pathlib.Path):
 
         self.cnn = networks.ResnetController()
         self.cnn.load_state_dict(torch.load(model_path.as_posix(), map_location="cpu"))
@@ -128,24 +121,82 @@ class DirectActionResnet(Controller):
         return np.array(action.squeeze())
 
 
+class FixDisturbController(Controller):
+
+    def __init__(self, action_model_path: pathlib.Path, disturb_model_path: pathlib.Path):
+
+        self.action_model = OmegaController(action_model_path)
+        self.disturb_model = networks.BasicConvRNN()
+        self.disturb_model.load_state_dict(torch.load(disturb_model_path.as_posix(), map_location="cpu"))
+
+        self.imgs_per_update = 5
+        self.imgs_list = []
+        self.action_list = []
+        self.modifier = np.ones((2,))
+
+        self.img_size = (120, 160)
+
+        self.imgs = torch.empty(size=(self.imgs_per_update, 3, self.img_size[0], self.img_size[1]), dtype=torch.float)
+        self.actions = torch.empty(size=(self.imgs_per_update, 2), dtype=torch.float)
+
+        self.modifier_queue = collections.deque(maxlen=10)
+
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.Resize(self.img_size),
+            torchvision.transforms.ToTensor()
+        ])
+
+    def step(self, img: np.ndarray):
+        with torch.no_grad():
+            action = self.action_model.step(img)
+
+        new_action = action * self.modifier
+        self.perform_disturbance_update(img, new_action)
+        return new_action
+
+    def perform_disturbance_update(self, img: np.ndarray, action: np.ndarray):
+        self.imgs_list.append(img)
+        self.action_list.append(action)
+
+        if self.imgs_per_update > len(self.imgs_list):
+            return
+
+        for idx, img in enumerate(self.imgs_list):
+            self.imgs[idx, :, :, :] = self.transform(img)
+            self.actions[idx, :] = torch.Tensor(self.action_list[idx])
+
+        self.imgs_list = []
+        self.action_list = []
+
+        with torch.no_grad():
+            out = self.disturb_model(self.imgs, self.actions)
+
+        self.modifier_queue.append(np.array(out[-1, :].squeeze()))
+        self.modifier = np.zeros((2,))
+        for mod in self.modifier_queue:
+            self.modifier += mod
+        self.modifier /= len(self.modifier_queue)
+        print(self.modifier)
+
+
 def get_controller(args: Any) -> Controller:
     """
     Controller factory.
     :param args:
     :return:
     """
-    if args.controller == "caffe_copy":
-        controller_args = yaml.load(pathlib.Path(args.args).read_text())
-        controller = OmegaController(pathlib.Path(controller_args["pkg_path"]),
-                                     pathlib.Path(controller_args["model_path"]))
+    controller_args = yaml.load(pathlib.Path(args.args).read_text())
+    if args.controller == "omega":
+        controller = OmegaController(pathlib.Path(controller_args["model_path"]))
     elif args.controller == "direct_action":
-        controller_args = yaml.load(pathlib.Path(args.args).read_text())
-        controller = DirectAction(pathlib.Path(controller_args["pkg_path"]),
-                                  pathlib.Path(controller_args["model_path"]))
+        controller = DirectAction(pathlib.Path(controller_args["model_path"]))
     elif args.controller == "resnet":
-        controller_args = yaml.load(pathlib.Path(args.args).read_text())
-        controller = DirectActionResnet(pathlib.Path(controller_args["pkg_path"]),
-                                        pathlib.Path(controller_args["model_path"]))
+        controller = DirectActionResnet(pathlib.Path(controller_args["model_path"]))
+    elif args.controller == "disturb":
+        controller = FixDisturbController(pathlib.Path(controller_args["model_path"]),
+                                          pathlib.Path("/home/dominik/dataspace/models/rnn_randomwalk_forward/"
+                                                       "run5_step_40000.pth"))
     else:
         raise ValueError("Unknown controller: {}".format(args.controller))
 
@@ -158,6 +209,9 @@ def main():
     parser.add_argument("--controller", "-c", required=True, help="Controller to be used")
     parser.add_argument("--map", default="udem1")
     parser.add_argument("--args", help="yaml file containing arguments dictionary for controller")
+    parser.add_argument("--num_seq", default=3, type=int)
+    parser.add_argument("--num_img", default=200, type=int)
+    parser.add_argument("--augment_action", default="1,1", type=str)
 
     args = parser.parse_args()
 
@@ -167,8 +221,12 @@ def main():
 
     env.render()
 
-    num_sequences = 5
-    num_img_per_seq = 1500
+    num_sequences = args.num_seq
+    num_img_per_seq = args.num_img
+
+    action_mult = np.array(list(map(float, args.augment_action.split(","))))
+    assert action_mult.shape == (2,), "--augment_action must be two floats separated by a comma, e.g. '0.4,0.6'"
+
     save_path = pathlib.Path("/home/dominik/dataspace/images/cnn_controller_lane_following/test")
 
     for num_seq in range(num_sequences):
@@ -187,7 +245,7 @@ def main():
         for num_img in range(num_img_per_seq):
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img + 1)
 
-            action = controller.step(obs)
+            action = controller.step(obs) * action_mult
             obs, reward, _, _ = env.step(action, delta_t)
             save_img(img_path, obs)
 

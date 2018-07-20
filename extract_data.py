@@ -8,7 +8,7 @@ import cv2
 
 import numpy as np
 
-from gym_duckietown.envs import GeneratorEnv, Parameters
+from gym_duckietown.envs import GeneratorEnv
 
 
 def save_img(path: pathlib.Path, img):
@@ -35,7 +35,7 @@ def main():
         img_path = seq_dir / "img_00000.jpg"
 
         modifier = 0.1 + np.random.random(2) * 2
-        delta_t = 0.033
+        delta_t = 0.1
 
         save_img(img_path, obs)
 
@@ -47,7 +47,6 @@ def main():
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img + 1)
 
             action = np.random.rand(2) * modifier
-            action = [np.array([1, .5]), np.array([-1, -0.5])][num_img]
             obs, _, _, _ = env.step(action, delta_t)
             save_img(img_path, obs)
 

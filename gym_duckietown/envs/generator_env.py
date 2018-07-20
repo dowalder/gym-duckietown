@@ -78,6 +78,20 @@ ROBOT_SPEED = 0.45
 MIN_SPAWN_OBJ_DIST = 0.25
 
 
+def set_only_road():
+    global BLUE_SKY_COLOR, WALL_COLOR, GROUND_COLOR
+    BLUE_SKY_COLOR = np.array([0.0, 0.0, 0.0])
+    WALL_COLOR = np.array([0.0, 0.0, 0.0])
+    GROUND_COLOR = np.array([0.0, 0.0, 0.0])
+
+
+def unset_only_road():
+    global BLUE_SKY_COLOR, WALL_COLOR, GROUND_COLOR
+    BLUE_SKY_COLOR = np.array([0.45, 0.82, 1])
+    WALL_COLOR = np.array([0.64, 0.71, 0.28])
+    GROUND_COLOR = np.array([0.15, 0.15, 0.15])
+
+
 class GeneratorEnv(gym.Env):
     """
     Simple road simulator to test RL training.
@@ -784,16 +798,18 @@ class GeneratorEnv(gym.Env):
 
         return reward
 
-    def step(self, action: np.ndarray, delta_t=0.1, wishpoint=None):
+    def step(self, action: np.ndarray, delta_t=0.1, wishpoint=None, only_road=False):
         self.step_count += 1
 
         # Update the robot's position
         self._update_pos(action * ROBOT_SPEED * 1, delta_t)
+
+        # If specified, fix the robot at a fix point
         if wishpoint is not None:
             self.cur_pos = wishpoint
 
         # Generate the current camera image
-        obs = self.render_obs()
+        obs = self.render_obs(only_road)
 
         # If the agent is not in a valid pose (on drivable tiles)
         if not self._valid_pose():
@@ -814,7 +830,7 @@ class GeneratorEnv(gym.Env):
 
         return obs, reward, done, {}
 
-    def render_obs(self):
+    def render_obs(self, only_road=False):
         """
         Render an observation from the point of view of the agent
         """
@@ -824,10 +840,11 @@ class GeneratorEnv(gym.Env):
             CAMERA_HEIGHT,
             self.multi_fbo,
             self.final_fbo,
-            self.img_array
+            self.img_array,
+            only_road
         )
 
-    def _render_img(self, width, height, multi_fbo, final_fbo, img_array):
+    def _render_img(self, width, height, multi_fbo, final_fbo, img_array, only_road=False):
         if self.graphics == False:
             return
 
@@ -887,16 +904,17 @@ class GeneratorEnv(gym.Env):
             0, 1.0, 0.0
         )
 
-        # Draw the ground quad
-        glDisable(GL_TEXTURE_2D)
-        glColor3f(*self.ground_color)
-        glPushMatrix()
-        glScalef(50, 1, 50)
-        self.ground_vlist.draw(GL_QUADS)
-        glPopMatrix()
+        if not only_road:
+            # Draw the ground quad
+            glDisable(GL_TEXTURE_2D)
+            glColor3f(*self.ground_color)
+            glPushMatrix()
+            glScalef(50, 1, 50)
+            self.ground_vlist.draw(GL_QUADS)
+            glPopMatrix()
 
-        # Draw the ground/noise triangles
-        self.tri_vlist.draw(GL_TRIANGLES)
+            # Draw the ground/noise triangles
+            self.tri_vlist.draw(GL_TRIANGLES)
 
         # Draw the road quads
         glEnable(GL_TEXTURE_2D)
@@ -913,6 +931,8 @@ class GeneratorEnv(gym.Env):
                     continue
 
                 kind = tile['kind']
+                if only_road and kind not in ["straight", "curve_left", "curve_right", "3way_left", "3way_right", "4way"]:
+                    continue
                 angle = tile['angle']
                 color = tile['color']
                 texture = tile['texture']
@@ -934,42 +954,43 @@ class GeneratorEnv(gym.Env):
                     bezier_draw(pts, n=20)
 
         # For each object
-        for idx, obj in enumerate(self.objects):
-            if not obj['visible']:
-                continue
+        if not only_road:
+            for idx, obj in enumerate(self.objects):
+                if not obj['visible']:
+                    continue
 
-            # Draw the bounding box
+                # Draw the bounding box
+                if self.draw_bbox:
+                    corners = self.static_corners[idx]
+                    glColor3f(1, 0, 0)
+                    glBegin(GL_LINE_LOOP)
+                    glVertex3f(corners[0, 0], 0.01, corners[1, 0])
+                    glVertex3f(corners[0, 1], 0.01, corners[1, 1])
+                    glVertex3f(corners[0, 2], 0.01, corners[1, 2])
+                    glVertex3f(corners[0, 3], 0.01, corners[1, 3])
+                    glEnd()
+
+                scale = obj['scale']
+                y_rot = obj['y_rot']
+                mesh = obj['mesh']
+                glPushMatrix()
+                glTranslatef(*obj['pos'])
+                glScalef(scale, scale, scale)
+                glRotatef(y_rot, 0, 1, 0)
+                glColor3f(*obj['color'])
+                mesh.render()
+                glPopMatrix()
+
+            # Draw the agent's own bounding box
             if self.draw_bbox:
-                corners = self.static_corners[idx]
+                corners = self.duckie_corners
                 glColor3f(1, 0, 0)
                 glBegin(GL_LINE_LOOP)
-                glVertex3f(corners[0, 0], 0.01, corners[1, 0])
-                glVertex3f(corners[0, 1], 0.01, corners[1, 1])
-                glVertex3f(corners[0, 2], 0.01, corners[1, 2])
-                glVertex3f(corners[0, 3], 0.01, corners[1, 3])
+                glVertex3f(corners[0, 0], 0.01, corners[0, 1])
+                glVertex3f(corners[1, 0], 0.01, corners[1, 1])
+                glVertex3f(corners[2, 0], 0.01, corners[2, 1])
+                glVertex3f(corners[3, 0], 0.01, corners[3, 1])
                 glEnd()
-
-            scale = obj['scale']
-            y_rot = obj['y_rot']
-            mesh = obj['mesh']
-            glPushMatrix()
-            glTranslatef(*obj['pos'])
-            glScalef(scale, scale, scale)
-            glRotatef(y_rot, 0, 1, 0)
-            glColor3f(*obj['color'])
-            mesh.render()
-            glPopMatrix()
-
-        # Draw the agent's own bounding box
-        if self.draw_bbox:
-            corners = self.duckie_corners
-            glColor3f(1, 0, 0)
-            glBegin(GL_LINE_LOOP)
-            glVertex3f(corners[0, 0], 0.01, corners[0, 1])
-            glVertex3f(corners[1, 0], 0.01, corners[1, 1])
-            glVertex3f(corners[2, 0], 0.01, corners[2, 1])
-            glVertex3f(corners[3, 0], 0.01, corners[3, 1])
-            glEnd()
 
         # Resolve the multisampled frame buffer into the final frame buffer
         glBindFramebuffer(GL_READ_FRAMEBUFFER, multi_fbo);
