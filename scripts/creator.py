@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+
+import argparse
+import pathlib
+import random
+from typing import List
+
+import yaml
+import cv2
+import numpy as np
+
+import graphics
+
+
+def load_only_road_imgs(path: pathlib.Path) -> List[pathlib.Path]:
+    road_imgs = []
+    for pth in path.iterdir():
+        if pth.suffix != ".yaml":
+            continue
+        info = yaml.load(pth.read_text())
+        for entry in info:
+            if "only_road_pth" not in entry:
+                raise ValueError("Found invalid sequence info: {}".format(pth))
+            road_imgs.append(path / entry["only_road_pth"])
+
+    return road_imgs
+
+
+def create_images(road_dir: pathlib.Path,
+                  background_dir: pathlib.Path,
+                  tgt_dir: pathlib.Path,
+                  num_imgs=1000,
+                  test_percentage=0.3,
+                  attach_width=False,
+                  verbose=False) -> None:
+    a_test = tgt_dir / "testA"
+    b_test = tgt_dir / "testB"
+    a_train = tgt_dir / "trainA"
+    b_train = tgt_dir / "trainB"
+    a_test.mkdir(exist_ok=True)
+    b_test.mkdir(exist_ok=True)
+    a_train.mkdir(exist_ok=True)
+    b_train.mkdir(exist_ok=True)
+
+    road_imgs = load_only_road_imgs(road_dir)
+    background_imgs = [background_dir / img for img in background_dir.glob("*.jpg")]
+
+    for idx in range(num_imgs):
+        road = cv2.imread(random.choice(road_imgs).as_posix())
+        height, width = road.shape[:2]
+        height_mod = random.randint(0, 100)
+        width_mod = random.randint(0, 100)
+
+        if verbose:
+            print("height_mod", height_mod)
+            print("width_mod", width_mod)
+
+        background = cv2.imread(random.choice(background_imgs).as_posix())
+        background = cv2.resize(background, (width + width_mod, height + height_mod))
+        road_filtered_extended = np.zeros((height + height_mod, width + width_mod, 3), dtype=np.uint8)
+
+        if verbose:
+            print("background shape", background.shape)
+
+        scale_width_mod = width_mod if attach_width else random.randint(0, width_mod)
+        road = cv2.resize(road, (width + scale_width_mod, height))
+        road_filtered = graphics.apply_color_filter(road)
+
+        if verbose:
+            print("scale_width_mod", scale_width_mod)
+            print("road shape", road.shape)
+
+        width_start = random.randint(0, width_mod - scale_width_mod)
+        width_end = width_start + width + scale_width_mod
+
+        if verbose:
+            print("width_start", width_start)
+            print("width_end", width_end)
+
+        background_box = background[height_mod:, width_start:width_end, :]
+
+        if verbose:
+            print("background_box shape", background.shape)
+
+        background_box *= (road == 0)
+        background_box += road
+        road_filtered_extended[height_mod:, width_start:width_end, :] = road_filtered
+
+        if random.random() < test_percentage:
+            a_path = a_test / "{0:05d}.jpg".format(idx)
+            b_path = b_test / "{0:05d}.jpg".format(idx)
+        else:
+            a_path = a_train / "{0:05d}.jpg".format(idx)
+            b_path = b_train / "{0:05d}.jpg".format(idx)
+
+        cv2.imwrite(a_path.as_posix(), background)
+        cv2.imwrite(b_path.as_posix(), road_filtered_extended)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--road_dir", required=True)
+    parser.add_argument("--background_dir", required=True)
+    parser.add_argument("--tgt_dir", required=True)
+    parser.add_argument("--num_imgs", default=1000)
+
+    args = parser.parse_args()
+
+    road_dir = pathlib.Path(args.road_dir)
+    background_dir = pathlib.Path(args.background_dir)
+    tgt_dir = pathlib.Path(args.tgt_dir)
+
+    assert road_dir.is_dir(), "Not a directory: {}".format(road_dir)
+    assert background_dir.is_dir(), "Not a directory: {}".format(background_dir)
+    tgt_dir.mkdir(exist_ok=True, parents=True)
+
+    create_images(road_dir, background_dir, tgt_dir, num_imgs=args.num_imgs)
+
+
+if __name__ == "__main__":
+    main()

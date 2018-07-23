@@ -62,7 +62,7 @@ def eval_actions(env, seed, actions):
         positions.append((env.cur_pos, env.cur_angle))
 
         env.graphics = False
-        obs, reward, done, info = env.step(vels)
+        obs, reward, done, info = env.find_action(vels)
         env.graphics = True
 
         total_reward += reward

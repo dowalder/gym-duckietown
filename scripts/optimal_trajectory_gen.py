@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from gym_duckietown.envs import GeneratorEnv, set_only_road, unset_only_road
+import src.actionfinder
 
 
 def save_img(path: pathlib.Path, img):
@@ -27,70 +28,6 @@ def save_img(path: pathlib.Path, img):
     cv2.imwrite(path.as_posix(), img)
 
 
-class DiscreteActionFinder:
-    """
-    Finds the correct action from a discrete set by trying every action and choosing the one with the highest reward.
-    """
-
-    def __init__(self, delta_t=0.1, range=(-1.0, 1.0), resolution=201, v=0.5, wheel_dist=0.1):
-        assert isinstance(range, tuple), "got {}".format(range.__class__)
-        assert len(range) == 2, "got {}".format(len(range))
-        assert isinstance(resolution, int), "got {}".format(resolution.__class__)
-        assert resolution > 0, "got {}".format(resolution)
-
-        self.possible_omega = np.linspace(range[0], range[1], resolution)
-        self.left = v + 0.5 * self.possible_omega * wheel_dist
-        self.right = v - 0.5 * self.possible_omega * wheel_dist
-        self.delta_t = delta_t
-
-    def find_action(self, env: GeneratorEnv):
-        """
-        Finds the most rewarding action.
-
-        :param env: simulation environment to test the actions
-        :return:
-        """
-        best_action = None
-        best_omega = None
-        best_reward = -1e6
-        for i, action in enumerate(zip(self.left, self.right)):
-            action = np.array(action)
-            reward = env.theoretical_step(action, self.delta_t)
-            if reward > best_reward:
-                best_action = action
-                best_reward = reward
-                best_omega = self.possible_omega[i]
-
-        if best_reward <= -20:
-            return None
-        else:
-            return best_action, best_omega
-
-
-class PurePursuitController:
-    """
-    NOT WORKING
-    """
-
-    def __init__(self, vel=0.4, lookahead=0.1, wheel_dist=0.1):
-        self.v = vel
-        self.wheel_dist = wheel_dist
-        self.lookahead = lookahead
-
-    def step(self, env: GeneratorEnv):
-        x_curr, _, z_curr = env.cur_pos
-        angle = env.cur_angle
-
-        x_goal, _, z_goal = env.lookahead_point(lookahead_dist=self.lookahead)
-        r_goal = -(x_goal - x_curr) * np.sin(angle) + (z_goal - z_curr) * np.cos(angle)
-        curvature = 2 * r_goal / (self.lookahead ** 2)
-        omega = curvature * self.v
-
-        vel_left = self.v + 0.5 * omega * self.wheel_dist
-        vel_right = self.v - 0.5 * omega * self.wheel_dist
-        return np.array([vel_left, vel_right]), omega
-
-
 def main():
     parser = argparse.ArgumentParser()
 
@@ -99,8 +36,15 @@ def main():
     parser.add_argument("--only_road", action="store_true",
                         help="If set, an only road picture is generated for every ordinary image as well")
     parser.add_argument("--mod", action="store_true")
+    parser.add_argument("--find_road", action="store_true",
+                        help="first searches for the road before it starts recording")
     parser.add_argument("--perturb_factor", default=0.0)
     parser.add_argument("--disturb_chance", default=0.0)
+    parser.add_argument("--delta_t", default=0.1)
+    parser.add_argument("--num_seq", default=20)
+    parser.add_argument("--num_imgs", default=50)
+    parser.add_argument("--model_path",
+                        help="if specified, a CNN controller is used instead of the optimal action finder")
 
     args = parser.parse_args()
 
@@ -112,35 +56,37 @@ def main():
 
     env.render()
 
-    delta_t = 0.1
-    num_sequences = 100
-    num_img_per_seq = 100
+    delta_t = args.delta_t
     save_path = pathlib.Path(args.tgt_dir)
 
     # The faster moving action finder is better to find a starting position (it is more stable to converge), but the
     # slower action finder provides better training data as it does move more smoothly around curves.
-    action_finder_fast = DiscreteActionFinder(delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
-    action_finder_slow = DiscreteActionFinder(delta_t=delta_t, range=(-4.0, 4.0), resolution=201, v=0.2)
+    action_finder_fast = src.actionfinder.DiscreteActionFinder(delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
+    if args.model_path is not None:
+        controller = src.actionfinder.CNNActionFinder(model_path=pathlib.Path(args.model_path))
+    else:
+        controller = src.actionfinder.DiscreteActionFinder(delta_t=delta_t, range=(-4.0, 4.0), resolution=201, v=0.2)
 
     num_seq = 0
-    while num_seq < num_sequences:
+    while num_seq < args.num_seq:
         print("running on sequence: {}".format(num_seq))
         seq_dir = save_path / "seq_{0:05d}".format(num_seq)
         seq_dir.mkdir(exist_ok=True)
         obs = env.reset(perturb_factor=float(args.perturb_factor))
 
-        # find a starting position
-        for _ in range(50):
-            out = action_finder_fast.find_action(env)
-            if out is None:
-                break
-            else:
-                action, _ = out
-            obs, _, _, _ = env.step(action, delta_t)
-        if args.only_road:
-            env_only_road.cur_pos = env.cur_pos
-            env_only_road.cur_angle = env.cur_angle
-            obs_only_road = env_only_road.render_obs(only_road=True)
+        if args.find_road:
+            # find a starting position
+            for _ in range(10):
+                out = action_finder_fast.find_action(env)
+                if out is None:
+                    break
+                else:
+                    action, _ = out
+                obs, _, _, _ = env.step(action, delta_t)
+            if args.only_road:
+                env_only_road.cur_pos = env.cur_pos
+                env_only_road.cur_angle = env.cur_angle
+                obs_only_road = env_only_road.render_obs(only_road=True)
 
         info = []
 
@@ -150,7 +96,7 @@ def main():
             modifier = np.ones((2,))
 
         num_img = 0
-        while num_img < num_img_per_seq:
+        while num_img < args.num_imgs:
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img)
             only_road_pth = seq_dir / "only_road_{0:05d}.jpg".format(num_img)
 
@@ -160,7 +106,7 @@ def main():
                 env.step(action, delta_t)
                 continue
             else:
-                out = action_finder_slow.find_action(env)
+                out = controller.find_action(env)
                 if out is None:
                     info = None
                     break
@@ -173,6 +119,8 @@ def main():
             # action belongs to the old image
             if args.only_road:
                 save_img(only_road_pth, obs_only_road)
+
+            save_img(img_path, obs)
 
             obs, reward, _, _ = env.step(action * modifier, delta_t)
             if args.only_road:

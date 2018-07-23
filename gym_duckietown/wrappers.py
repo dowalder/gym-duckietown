@@ -33,7 +33,7 @@ class HeadingWrapper(gym.Wrapper):
 
         vel = lVel * (1 - x) + x * rVel
 
-        return self.env.step(vel)
+        return self.env.find_action(vel)
 
     def reset(self, **kwargs):
         self.heading = 0

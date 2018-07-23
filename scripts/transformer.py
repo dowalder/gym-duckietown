@@ -6,26 +6,7 @@ import pathlib
 import cv2
 import numpy as np
 
-
-def brightness(img: np.ndarray) -> np.ndarray:
-    scale = 0.3 + np.random.random() * 1.4
-    float_img = img.astype(np.float)
-    float_img *= scale
-    np.clip(float_img, 0, 255, out=float_img)
-    return float_img.astype(np.uint8)
-
-
-def spot(img: np.ndarray) -> np.ndarray:
-    kernel_size = 51
-    kernel = cv2.getGaussianKernel(kernel_size, 10)
-    kernel = (kernel.dot(kernel.transpose()) * 5e4).astype(np.uint8)
-    kernel = kernel[:, :, None]
-
-    height, width = img.shape[:2]
-    start_height = int(np.random.random() * (height - kernel_size))
-    start_width = int(np.random.random() * (width - kernel_size))
-    img[start_height:start_height + kernel_size, start_width:start_width + kernel_size, :] += kernel
-    return img
+import src.graphics
 
 
 def main():
@@ -49,10 +30,10 @@ def main():
             continue
         img = cv2.imread(pth.as_posix())
 
-        img = brightness(img)
+        img = src.graphics.gradient_lighting(img)
         for _ in range(4):
             if np.random.random() < 0.2:
-                img = spot(img)
+                img = src.graphics.spot(img)
 
         tgt_pth = tgt_dir / pth.name
         cv2.imwrite(tgt_pth.as_posix(), img)

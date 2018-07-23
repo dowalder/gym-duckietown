@@ -6,17 +6,9 @@ import pathlib
 import shutil
 
 import yaml
-import numpy as np
 import cv2
 
-
-def apply_color_filter(img: np.ndarray) -> np.ndarray:
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Keep the red or the bright pixels (all road marks, basically)
-    mask = (img[:, :, 2] > 100) | (img_gray > 100)
-    mask = mask[:, :, None]
-    return img * mask
+import src.graphics
 
 
 def copy_images(src_dir: pathlib.Path, tgt_dir: pathlib.Path, filter_color=False) -> None:
@@ -58,7 +50,7 @@ def copy_images(src_dir: pathlib.Path, tgt_dir: pathlib.Path, filter_color=False
 
             if filter_color:
                 img = cv2.imread(img_src_b.as_posix())
-                img = apply_color_filter(img)
+                img = src.graphics.apply_color_filter(img)
                 cv2.imwrite(img_tgt_b.as_posix(), img)
             else:
                 shutil.copy(img_src_b.as_posix(), img_tgt_b.as_posix())
