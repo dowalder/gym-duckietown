@@ -48,6 +48,7 @@ class Params:
         self.network = conf["network"]
         self.num_epochs = conf["num_epochs"]
         self.pretrained = conf["pretrained"]
+        self.data_in_memory = conf["data_in_memory"]
 
         self.test_interval = conf["intervals"]["test"]
         self.display_interval = conf["intervals"]["display"]
@@ -65,6 +66,7 @@ def check_conf(conf: Dict):
         "num_epochs": int,
         "pretrained": bool,
         "pretrained_path": str,
+        "data_in_memory": bool,
     }
     for key, val in required_fields.items():
         assert key in conf, "Missing key: {}".format(key)
@@ -211,8 +213,10 @@ def train_rnn(params: Params):
     else:
         img_size = (120, 160)
         grayscale = False
-    train_set = src.dataset.RNNDataSet(params.train_path, 10, device=params.device, img_size=img_size, grayscale=grayscale)
-    test_set = src.dataset.RNNDataSet(params.test_path, 10, device=params.device, img_size=img_size, grayscale=grayscale)
+    train_set = src.dataset.RNNDataSet(params.train_path, 10, device=params.device, img_size=img_size,
+                                       grayscale=grayscale, in_memory=params.data_in_memory)
+    test_set = src.dataset.RNNDataSet(params.test_path, 10, device=params.device, img_size=img_size,
+                                      grayscale=grayscale, in_memory=params.data_in_memory)
 
     net = net_factory(params.network, params)
     net.to(params.device)

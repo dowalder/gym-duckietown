@@ -134,7 +134,8 @@ class RNNDataSet(torch.utils.data.Dataset):
                  seq_length: Union[int, Tuple[int, int]],
                  device="cpu",
                  img_size=(120, 160),
-                 grayscale=False):
+                 grayscale=False,
+                 in_memory=False):
         self.length = seq_length
         self.sequences = []
         self.dir = data_dir
@@ -151,10 +152,22 @@ class RNNDataSet(torch.utils.data.Dataset):
         self.device = torch.device(device)
         self.grayscale = grayscale
 
+        self.imgs = []
+        self.actions = []
+        self.lbls = []
+        if in_memory:
+            for img, action, lbl in self:
+                self.imgs.append(img)
+                self.actions.append(action)
+                self.lbls.append(lbl)
+
     def __len__(self):
         return len(self.sequences)
 
     def __getitem__(self, item):
+        if self.imgs and self.actions and self.lbls:
+            return self.imgs[item], self.actions[item], self.lbls[item]
+
         seq = self.sequences[item]
         length = np.random.randint(self.length[0], self.length[1]) if isinstance(self.length, tuple) else self.length
         if length >= len(seq):
