@@ -8,7 +8,7 @@ import torch
 import torchvision
 import numpy as np
 
-import networks
+import src.networks
 
 
 class Controller(abc.ABC):
@@ -31,7 +31,7 @@ class OmegaController(Controller):
 
     def __init__(self, model_path: pathlib.Path):
 
-        self.cnn = networks.InitialNet()
+        self.cnn = src.networks.InitialNet()
         self.cnn.load_state_dict(torch.load(model_path.as_posix()))
         self.v = 0.2
         self.wheel_dist = 0.1
@@ -59,7 +59,7 @@ class DirectAction(Controller):
     """
 
     def __init__(self, model_path: pathlib.Path):
-        self.cnn = networks.InitialNet()
+        self.cnn = src.networks.InitialNet()
         self.cnn.load_state_dict(torch.load(model_path.as_posix(), map_location="cpu"))
 
         self._transform = torchvision.transforms.Compose([
@@ -83,7 +83,7 @@ class DirectActionResnet(Controller):
 
     def __init__(self, model_path: pathlib.Path):
 
-        self.cnn = networks.ResnetController()
+        self.cnn = src.networks.ResnetController()
         self.cnn.load_state_dict(torch.load(model_path.as_posix(), map_location="cpu"))
 
         self._transform = torchvision.transforms.Compose([
@@ -104,7 +104,7 @@ class FixDisturbController(Controller):
     def __init__(self, action_model_path: pathlib.Path, disturb_model_path: pathlib.Path):
 
         self.action_model = OmegaController(action_model_path)
-        self.disturb_model = networks.BasicConvRNN()
+        self.disturb_model = src.networks.BasicConvRNN()
         self.disturb_model.load_state_dict(torch.load(disturb_model_path.as_posix(), map_location="cpu"))
 
         self.imgs_per_update = 5

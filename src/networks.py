@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+import pathlib
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models.resnet
 
-import resnet
+import src.resnet
 
 
 def _num_flat_features(x):
@@ -82,12 +85,31 @@ class InitialNet(nn.Module):
         return x
 
 
+class InitialNetSharingWeights(InitialNet):
+
+    def __init__(self):
+        super(InitialNetSharingWeights, self).__init__()
+
+    def conv_only(self, img):
+        x = F.relu(self.conv1(img))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        return x
+
+    def first_fc(self, img):
+        x = self.conv_only(img)
+        x = x.view(-1, _num_flat_features(x))
+        x = F.relu(self.fc1(x))
+        return x
+
+
 class ResnetController(nn.Module):
 
     def __init__(self):
         super(ResnetController, self).__init__()
 
-        self.resnet = resnet.resnet8()
+        self.resnet = src.resnet.resnet8()
 
         self.dropout = nn.Dropout2d(0.3)
 
@@ -129,6 +151,46 @@ class DoubleLabelNet(NImagesNet):
 class Flatten(nn.Module):
     def forward(self, x):
         return x.view(x.size(0), -1)
+
+
+class WeightsSharingRNN(nn.Module):
+
+    def __init__(self, cnn_weights_path: Optional[pathlib.Path]=None, num_lstms=1, cnn_no_grad=False, device="cpu"):
+        super(WeightsSharingRNN, self).__init__()
+
+        self.cnn = InitialNetSharingWeights()
+        if cnn_weights_path is not None:
+            self.cnn.load_state_dict(torch.load(cnn_weights_path.as_posix()))
+        self.cnn_no_grad = cnn_no_grad
+
+        self.num_lstms = num_lstms
+        self.rnn = nn.LSTM(input_size=1026, hidden_size=128, num_layers=self.num_lstms, dropout=0.0)
+        self.fc_final = nn.Linear(in_features=128, out_features=2)
+
+        self.device = torch.device(device)
+
+        self.init_hidden()
+
+    def to(self, device):
+        super(WeightsSharingRNN, self).to(device)
+        self.device = torch.device(device)
+        self.hidden = (self.hidden[0].to(self.device), self.hidden[1].to(self.device))
+
+    def init_hidden(self):
+        self.hidden = (torch.zeros(self.num_lstms, 1, 128, device=self.device),
+                       torch.zeros(self.num_lstms, 1, 128, device=self.device))
+
+    def forward(self, img, action):
+        if self.cnn_no_grad:
+            with torch.no_grad():
+                x = self.cnn.first_fc(img)
+        else:
+            x = self.cnn.first_fc(img)
+        x = torch.cat((x, action), 1)
+        x = x.unsqueeze(1)
+        x, self.hidden = self.rnn(x, self.hidden)
+        x = self.fc_final(x)
+        return x
 
 
 class BasicConvRNN(nn.Module):
@@ -225,7 +287,7 @@ class ResnetRNNsmall(nn.Module):
         super(ResnetRNNsmall, self).__init__()
         self.num_lstms = 1
 
-        self.resnet = resnet.resnet8()
+        self.resnet = src.resnet.resnet8()
         self.dropout = nn.Dropout(p=0.2)
         self.rnn = nn.LSTM(input_size=1002, hidden_size=128, num_layers=self.num_lstms)
         self.fc_final = nn.Linear(in_features=128, out_features=2)

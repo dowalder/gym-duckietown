@@ -133,7 +133,8 @@ class RNNDataSet(torch.utils.data.Dataset):
                  data_dir: pathlib.Path,
                  seq_length: Union[int, Tuple[int, int]],
                  device="cpu",
-                 img_size=(120, 160)):
+                 img_size=(120, 160),
+                 grayscale=False):
         self.length = seq_length
         self.sequences = []
         self.dir = data_dir
@@ -142,12 +143,13 @@ class RNNDataSet(torch.utils.data.Dataset):
             if path.suffix == ".yaml":
                 self.sequences.append(yaml.load(path.read_text()))
 
-        self.transform = transforms.Compose([
-            transforms.Resize(img_size),
-            # transforms.Grayscale(),
-            transforms.ToTensor()
-        ])
+        transforms_list = [transforms.Resize(img_size)]
+        if grayscale:
+            transforms_list.append(transforms.Grayscale())
+        transforms_list.append(transforms.ToTensor())
+        self.transform = transforms.Compose(transforms_list)
         self.device = torch.device(device)
+        self.grayscale = grayscale
 
     def __len__(self):
         return len(self.sequences)
@@ -160,7 +162,9 @@ class RNNDataSet(torch.utils.data.Dataset):
 
         start_idx = np.random.randint(0, len(seq) - length)
 
-        imgs = torch.empty(size=(length, 3, self.img_size[0], self.img_size[1]), dtype=torch.float, device=self.device)
+        channels = 1 if self.grayscale else 3
+        imgs = torch.empty(
+            size=(length, channels, self.img_size[0], self.img_size[1]), dtype=torch.float, device=self.device)
         actions = torch.empty(size=(length, 2), dtype=torch.float, device=self.device)
         lbls = torch.empty(size=(length, 2), dtype=torch.float, device=self.device)
 

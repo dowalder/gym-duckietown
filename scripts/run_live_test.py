@@ -6,18 +6,16 @@ navigating the simulation.
 """
 
 import argparse
-import abc
 import pathlib
-import sys
 from typing import Any
-import collections
 
 import yaml
 import cv2
 import numpy as np
 
-from gym_duckietown.envs import GeneratorEnv
-import controllers
+from gym_duckietown.envs import GeneratorEnv, unset_only_road, set_only_road
+import src.controllers
+import src.graphics
 
 
 def save_img(path: pathlib.Path, img):
@@ -26,8 +24,7 @@ def save_img(path: pathlib.Path, img):
     cv2.imwrite(path.as_posix(), img)
 
 
-
-def get_controller(args: Any) -> Controller:
+def get_controller(args: Any) -> src.controllers.Controller:
     """
     Controller factory.
     :param args:
@@ -35,15 +32,16 @@ def get_controller(args: Any) -> Controller:
     """
     controller_args = yaml.load(pathlib.Path(args.args).read_text())
     if args.controller == "omega":
-        controller = controllers.OmegaController(pathlib.Path(controller_args["model_path"]))
+        controller = src.controllers.OmegaController(pathlib.Path(controller_args["model_path"]))
     elif args.controller == "direct_action":
-        controller = controllers.DirectAction(pathlib.Path(controller_args["model_path"]))
+        controller = src.controllers.DirectAction(pathlib.Path(controller_args["model_path"]))
     elif args.controller == "resnet":
-        controller = controllers.DirectActionResnet(pathlib.Path(controller_args["model_path"]))
+        controller = src.controllers.DirectActionResnet(pathlib.Path(controller_args["model_path"]))
     elif args.controller == "disturb":
-        controller = controllers.FixDisturbController(pathlib.Path(controller_args["model_path"]),
-                                                      pathlib.Path("/home/dominik/dataspace/models/rnn_randomwalk_forward/"
-                                                                    "run5_step_40000.pth"))
+        controller = src.controllers.FixDisturbController(pathlib.Path(controller_args["model_path"]),
+                                                          pathlib.Path(
+                                                              "/home/dominik/dataspace/models/rnn_randomwalk_forward/"
+                                                              "run5_step_40000.pth"))
     else:
         raise ValueError("Unknown controller: {}".format(args.controller))
 
@@ -59,11 +57,14 @@ def main():
     parser.add_argument("--num_seq", default=3, type=int)
     parser.add_argument("--num_img", default=200, type=int)
     parser.add_argument("--augment_action", default="1,1", type=str)
+    parser.add_argument("--only_road", action="store_true")
 
     args = parser.parse_args()
 
     controller = get_controller(args)
 
+    if args.only_road:
+        set_only_road()
     env = GeneratorEnv(map_name=args.map)
 
     env.render()
@@ -93,7 +94,9 @@ def main():
             img_path = seq_dir / "img_{0:05d}.jpg".format(num_img + 1)
 
             action = controller.step(obs) * action_mult
-            obs, reward, _, _ = env.step(action, delta_t)
+            obs, reward, _, _ = env.step(action, delta_t, only_road=args.only_road)
+            if args.only_road:
+                obs = src.graphics.apply_color_filter(obs)
             save_img(img_path, obs)
 
             info.append({"path": img_path.as_posix(),

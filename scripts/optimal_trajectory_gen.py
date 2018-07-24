@@ -38,11 +38,11 @@ def main():
     parser.add_argument("--mod", action="store_true")
     parser.add_argument("--find_road", action="store_true",
                         help="first searches for the road before it starts recording")
-    parser.add_argument("--perturb_factor", default=0.0)
-    parser.add_argument("--disturb_chance", default=0.0)
-    parser.add_argument("--delta_t", default=0.1)
-    parser.add_argument("--num_seq", default=20)
-    parser.add_argument("--num_imgs", default=50)
+    parser.add_argument("--perturb_factor", default=0.0, type=float)
+    parser.add_argument("--disturb_chance", default=0.0, type=float)
+    parser.add_argument("--delta_t", default=0.1, type=float)
+    parser.add_argument("--num_seq", default=20, type=int)
+    parser.add_argument("--num_imgs", default=50, type=int)
     parser.add_argument("--model_path",
                         help="if specified, a CNN controller is used instead of the optimal action finder")
 

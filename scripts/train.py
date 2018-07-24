@@ -2,7 +2,6 @@
 import argparse
 import os
 import pathlib
-import random
 import yaml
 from typing import Dict
 import collections
@@ -11,8 +10,8 @@ import torch
 import torch.nn
 import torch.utils.data
 
-import networks
-import dataset
+import src.networks
+import src.dataset
 
 
 class Statistics:
@@ -44,6 +43,7 @@ class Params:
         self.train_path = pathlib.Path(conf["train_path"])
         self.test_path = pathlib.Path(conf["test_path"])
         self.model_path = pathlib.Path(conf["model_path"])
+        self.pretrained_path = pathlib.Path(conf["pretrained_path"])
         self.device = torch.device(conf["device"])
         self.network = conf["network"]
         self.num_epochs = conf["num_epochs"]
@@ -63,7 +63,8 @@ def check_conf(conf: Dict):
         "intervals": dict,
         "network": str,
         "num_epochs": int,
-        "pretrained": bool
+        "pretrained": bool,
+        "pretrained_path": str,
     }
     for key, val in required_fields.items():
         assert key in conf, "Missing key: {}".format(key)
@@ -72,11 +73,13 @@ def check_conf(conf: Dict):
 
 def net_factory(net: str, params) -> torch.nn.Module:
     if net == "conv_rnn":
-        return networks.BasicConvRNN(device=params.device)
+        return src.networks.BasicConvRNN(device=params.device)
     elif net == "resnet_rnn":
-        return networks.ResnetRNN(pretrained=params.pretrained, device=params.device)
+        return src.networks.ResnetRNN(pretrained=params.pretrained, device=params.device)
     elif net == "resnet_rnn_small":
-        return networks.ResnetRNNsmall()
+        return src.networks.ResnetRNNsmall()
+    elif net == "shared_weights":
+        return src.networks.WeightsSharingRNN(cnn_weights_path=params.pretrained_path, cnn_no_grad=True, num_lstms=1)
     else:
         raise RuntimeError("Unkown network: {}".format(net))
 
@@ -112,7 +115,7 @@ def train_cnn(net,
               optimizer,
               save_dir,
               device="cpu",
-              num_epoch=100,
+              num_epoch=150,
               disp_interval=10,
               val_interval=50,
               save_interval=20):
@@ -154,7 +157,7 @@ def train_cnn(net,
 
             loss = criterion(outputs, lbls)
             loss.backward()
-            optimizer.find_action()
+            optimizer.step()
 
             running_loss += loss.item()
 
@@ -183,14 +186,14 @@ def exact_caffe_copy_factory(train_path, test_path):
     :param test_path: str -> path to testing data
     :return:
     """
-    train_set = dataset.DataSet(train_path)
-    test_set = dataset.DataSet(test_path)
+    train_set = src.dataset.DataSet(train_path)
+    test_set = src.dataset.DataSet(test_path)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=200, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=False)
 
-    net = networks.InitialNet()
-    net.apply(networks.weights_init)
+    net = src.networks.InitialNet()
+    net.apply(src.networks.weights_init)
 
     criterion = torch.nn.MSELoss()
     # optimizer = torch.optim.SGD(net.parameters(), lr=0.00001, momentum=0.85, weight_decay=0.0005)
@@ -199,9 +202,17 @@ def exact_caffe_copy_factory(train_path, test_path):
 
 
 def train_rnn(params: Params):
-    img_size = (224, 224) if params.network == "resnet_rnn" else (120, 160)
-    train_set = dataset.RNNDataSet(params.train_path, 10, device=params.device, img_size=img_size)
-    test_set = dataset.RNNDataSet(params.test_path, 10, device=params.device, img_size=img_size)
+    if params.network == "resnet_rnn":
+        img_size = (224, 224)
+        grayscale = False
+    elif params.network == "shared_weights":
+        img_size = (80, 160)
+        grayscale = True
+    else:
+        img_size = (120, 160)
+        grayscale = False
+    train_set = src.dataset.RNNDataSet(params.train_path, 10, device=params.device, img_size=img_size, grayscale=grayscale)
+    test_set = src.dataset.RNNDataSet(params.test_path, 10, device=params.device, img_size=img_size, grayscale=grayscale)
 
     net = net_factory(params.network, params)
     net.to(params.device)
@@ -263,13 +274,13 @@ def train_seq_cnn(params: Params):
 
     print("Loading datasets...")
     print("\ttraining: {}".format(params.train_path))
-    train_set = dataset.RNNDataSet(params.train_path, num_imgs, device=params.device, img_size=img_size)
+    train_set = src.dataset.RNNDataSet(params.train_path, num_imgs, device=params.device, img_size=img_size)
     print("\ttesting: {}".format(params.test_path))
-    test_set = dataset.RNNDataSet(params.test_path, num_imgs, device=params.device, img_size=img_size)
+    test_set = src.dataset.RNNDataSet(params.test_path, num_imgs, device=params.device, img_size=img_size)
 
     print("Loading net and moving it to {}...".format(params.device))
-    net = networks.SequenceCnn(device=params.device, num_imgs=num_imgs)
-    net.apply(networks.weights_init)
+    net = src.networks.SequenceCnn(device=params.device, num_imgs=num_imgs)
+    net.apply(src.networks.weights_init)
     net.to(params.device)
 
     optimizer = torch.optim.Adam(net.parameters())
@@ -321,13 +332,13 @@ def train_action_estimator(params: Params):
 
     print("Loading datasets...")
     print("\ttraining: {}".format(params.train_path))
-    train_set = dataset.RNNDataSet(params.train_path, 2, device=params.device, img_size=img_size)
+    train_set = src.dataset.RNNDataSet(params.train_path, 2, device=params.device, img_size=img_size)
     print("\ttesting: {}".format(params.test_path))
-    test_set = dataset.RNNDataSet(params.test_path, 2, device=params.device, img_size=img_size)
+    test_set = src.dataset.RNNDataSet(params.test_path, 2, device=params.device, img_size=img_size)
 
     print("Loading net and moving it to {}...".format(params.device))
-    net = networks.ActionEstimator()
-    net.apply(networks.weights_init)
+    net = src.networks.ActionEstimator()
+    net.apply(src.networks.weights_init)
     net.to(params.device)
 
     optimizer = torch.optim.Adam(net.parameters())
@@ -391,14 +402,14 @@ def main():
         train_cnn(net, train_loader, test_loader, criterion, optimizer, params.model_path.as_posix(),
                   device=params.device, save_interval=1000)
     elif args.net == "resnet":
-        train_set = dataset.ColorDataSet(params.train_path.as_posix())
-        test_set = dataset.ColorDataSet(params.test_path.as_posix())
+        train_set = src.dataset.ColorDataSet(params.train_path.as_posix())
+        test_set = src.dataset.ColorDataSet(params.test_path.as_posix())
 
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=200, shuffle=True)
         test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=False)
 
-        net = networks.ResnetController()
-        networks.weights_init(net)
+        net = src.networks.ResnetController()
+        src.networks.weights_init(net)
 
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.Adam(net.parameters())

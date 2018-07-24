@@ -6,8 +6,10 @@
 #train_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/mxm_gen/train"
 #test_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/mxm_gen/test"
 
-test_path: "/home/dominik/dataspace/images/mxm_sim/udem1/with_modifier_many_small/test"
-train_path: "/home/dominik/dataspace/images/mxm_sim/udem1/with_modifier_many_small/train"
+test_path: "/home/dominik/dataspace/images/mxm_sim/udem1/with_mod_many_small_large/test"
+train_path: "/home/dominik/dataspace/images/mxm_sim/udem1/with_mod_many_small_large/train"
+
+pretrained_path: "/home/dominik/dataspace/models/mxm_sim/caffe_copy_working.pth"
 
 model_path: "/home/dominik/dataspace/models/rnn_lf"
 device: "cuda:0"
@@ -17,5 +19,5 @@ intervals:
   test: 1000
   save: 5000
 num_epochs: 2000
-network: "conv_rnn"
+network: "shared_weights"
 pretrained: true
