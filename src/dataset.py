@@ -155,17 +155,21 @@ class RNNDataSet(torch.utils.data.Dataset):
         self.imgs = []
         self.actions = []
         self.lbls = []
+
+        self.in_memory = False
         if in_memory:
-            for img, action, lbl in self:
+            for idx in range(len(self.sequences)):
+                img, action, lbl = self.__getitem__(idx)
                 self.imgs.append(img)
                 self.actions.append(action)
                 self.lbls.append(lbl)
+            self.in_memory = True
 
     def __len__(self):
         return len(self.sequences)
 
     def __getitem__(self, item):
-        if self.imgs and self.actions and self.lbls:
+        if self.in_memory:
             return self.imgs[item], self.actions[item], self.lbls[item]
 
         seq = self.sequences[item]
