@@ -389,6 +389,13 @@ def train_action_estimator(params: Params):
     print("Done.")
 
 
+class LabelsToCrossEntropy(torch.nn.CrossEntropyLoss):
+
+    def __call__(self, result, label):
+        label_tensor = torch.zeros(result.shape, dtype=torch.long, device=result.device)
+        super(LabelsToCrossEntropy).__call__(result, label_tensor)
+
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -434,7 +441,7 @@ def main():
         net = src.networks.DiscreteActionNet(11)
         src.networks.weights_init(net)
 
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = LabelsToCrossEntropy()
         optimizer = torch.optim.Adam(net.parameters())
 
         train_cnn(net, train_loader, test_loader, criterion, optimizer, params.model_path.as_posix(),
