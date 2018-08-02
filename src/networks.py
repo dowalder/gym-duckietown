@@ -387,3 +387,17 @@ class ActionEstimator(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
+
+class DiscreteActionNet(nn.Module):
+
+    def __init__(self, num_actions):
+        super(DiscreteActionNet, self).__init__()
+
+        self.cnn = SimpleCNN()
+        self.fc_final = nn.Linear(in_features=1024, out_features=num_actions)
+
+    def forward(self, img):
+        x = self.cnn(img)
+        x = F.relu(self.fc_final(x))
+        return x

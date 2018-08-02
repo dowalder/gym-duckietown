@@ -9,25 +9,27 @@ import yaml
 import cv2
 import numpy as np
 
-import graphics
+import src.graphics
+import src.paths
 
 
-def load_only_road_imgs(path: pathlib.Path) -> List[pathlib.Path]:
+def load_only_road_imgs(paths: List[pathlib.Path]) -> List[pathlib.Path]:
     road_imgs = []
-    for pth in path.iterdir():
-        if pth.suffix != ".yaml":
-            continue
-        info = yaml.load(pth.read_text())
-        for entry in info:
-            if "only_road_pth" not in entry:
-                raise ValueError("Found invalid sequence info: {}".format(pth))
-            road_imgs.append(path / entry["only_road_pth"])
+    for path in paths:
+        for pth in path.iterdir():
+            if pth.suffix != ".yaml":
+                continue
+            info = yaml.load(pth.read_text())
+            for entry in info:
+                if "only_road_pth" not in entry:
+                    raise ValueError("Found invalid sequence info: {}".format(pth))
+                road_imgs.append(path / entry["only_road_pth"])
 
     return road_imgs
 
 
-def create_images(road_dir: pathlib.Path,
-                  background_dir: pathlib.Path,
+def create_images(road_dirs: List[pathlib.Path],
+                  background_dirs: List[pathlib.Path],
                   tgt_dir: pathlib.Path,
                   num_imgs=1000,
                   test_percentage=0.3,
@@ -42,8 +44,10 @@ def create_images(road_dir: pathlib.Path,
     a_train.mkdir(exist_ok=True)
     b_train.mkdir(exist_ok=True)
 
-    road_imgs = load_only_road_imgs(road_dir)
-    background_imgs = [background_dir / img for img in background_dir.glob("*.jpg")]
+    road_imgs = load_only_road_imgs(road_dirs)
+    background_imgs = []
+    for background_dir in background_dirs:
+        background_imgs += [background_dir / img for img in background_dir.glob("*.jpg")]
 
     for idx in range(num_imgs):
         road = cv2.imread(random.choice(road_imgs).as_posix())
@@ -64,7 +68,7 @@ def create_images(road_dir: pathlib.Path,
 
         scale_width_mod = width_mod if attach_width else random.randint(0, width_mod)
         road = cv2.resize(road, (width + scale_width_mod, height))
-        road_filtered = graphics.apply_color_filter(road)
+        road_filtered = src.graphics.apply_color_filter(road)
 
         if verbose:
             print("scale_width_mod", scale_width_mod)
@@ -100,22 +104,20 @@ def create_images(road_dir: pathlib.Path,
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--road_dir", required=True)
-    parser.add_argument("--background_dir", required=True)
+    parser.add_argument("--road_dirs", required=True)
+    parser.add_argument("--background_dirs", required=True)
     parser.add_argument("--tgt_dir", required=True)
-    parser.add_argument("--num_imgs", default=1000)
+    parser.add_argument("--num_imgs", default=1000, type=int)
 
     args = parser.parse_args()
 
-    road_dir = pathlib.Path(args.road_dir)
-    background_dir = pathlib.Path(args.background_dir)
-    tgt_dir = pathlib.Path(args.tgt_dir)
+    road_dirs = src.paths.str_to_list(args.road_dirs, need_exist=True, is_dir=True)
+    background_dirs = src.paths.str_to_list(args.background_dirs, need_exist=True, is_dir=True)
 
-    assert road_dir.is_dir(), "Not a directory: {}".format(road_dir)
-    assert background_dir.is_dir(), "Not a directory: {}".format(background_dir)
+    tgt_dir = pathlib.Path(args.tgt_dir)
     tgt_dir.mkdir(exist_ok=True, parents=True)
 
-    create_images(road_dir, background_dir, tgt_dir, num_imgs=args.num_imgs)
+    create_images(road_dirs, background_dirs, tgt_dir, num_imgs=args.num_imgs)
 
 
 if __name__ == "__main__":

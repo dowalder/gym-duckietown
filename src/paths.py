@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+from typing import List
+
+
+def str_to_list(string: str, need_exist=False, create=False, sep=",", is_dir=False) -> List[Path]:
+    paths = [Path(path) for path in string.split(sep)]
+    if create:
+        for path in paths:
+            path.mkdir(parents=True, exist_ok=True)
+    if need_exist:
+        for path in paths:
+            if is_dir:
+                assert path.is_dir(), "Not a directory: {}".format(path)
+            else:
+                assert path.exists(), "File not found: {}".format(path)
+    return paths

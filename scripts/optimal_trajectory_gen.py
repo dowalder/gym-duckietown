@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--num_imgs", default=50, type=int)
     parser.add_argument("--model_path",
                         help="if specified, a CNN controller is used instead of the optimal action finder")
+    parser.add_argument("--random_walk", action="store_true", help="a random walk is used instead of optimal actions")
+    parser.add_argument("--resolution", default=201, type=int)
 
     args = parser.parse_args()
 
@@ -61,11 +63,16 @@ def main():
 
     # The faster moving action finder is better to find a starting position (it is more stable to converge), but the
     # slower action finder provides better training data as it does move more smoothly around curves.
-    action_finder_fast = src.actionfinder.DiscreteActionFinder(delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
+    action_finder_fast = src.actionfinder.DiscreteActionFinder(
+        delta_t=delta_t, range=(-10.0, 10.0), resolution=50, v=0.5)
     if args.model_path is not None:
         controller = src.actionfinder.CNNActionFinder(model_path=pathlib.Path(args.model_path))
     else:
-        controller = src.actionfinder.DiscreteActionFinder(delta_t=delta_t, range=(-4.0, 4.0), resolution=201, v=0.2)
+        controller = src.actionfinder.DiscreteActionFinder(
+            delta_t=delta_t, range=(-4.0, 4.0), resolution=args.resolution, v=0.2)
+
+    if args.random_walk:
+        controller = src.actionfinder.RandomWalker(v=0.2, max_omega=4.0, wheel_dist=0.1)
 
     num_seq = 0
     while num_seq < args.num_seq:

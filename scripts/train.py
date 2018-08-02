@@ -424,6 +424,21 @@ def main():
         train_seq_cnn(params)
     elif args.net == "action_est":
         train_action_estimator(params)
+    elif args.net == "discrete_action":
+        train_set = src.dataset.ColorDataSet(params.train_path.as_posix())
+        test_set = src.dataset.ColorDataSet(params.test_path.as_posix())
+
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=200, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=True)
+
+        net = src.networks.DiscreteActionNet(11)
+        src.networks.weights_init(net)
+
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(net.parameters())
+
+        train_cnn(net, train_loader, test_loader, criterion, optimizer, params.model_path.as_posix(),
+                  device=params.device, save_interval=1000)
     else:
         raise RuntimeError("Unknown option for --net: {}".format(args.net))
 
