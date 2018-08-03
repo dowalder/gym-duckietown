@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
-from typing import Optional
+from typing import Optional, List, Union
 
 import torch
 import torch.nn as nn
@@ -8,6 +8,110 @@ import torch.nn.functional as F
 import torchvision.models.resnet
 
 import src.resnet
+import src.params
+
+
+class BaseModel(nn.Module):
+
+    def __init__(self, params: src.params.Params):
+        super(BaseModel, self).__init__()
+        self.iteration = 0
+        self.train_error = []
+        self.test_error = {}
+
+        self.params = params
+
+    def forward(self):
+        pass
+
+    def save(self) -> None:
+        path = self.params.model_path / "{0:7d}_net.pth"
+        torch.save(self.state_dict(), path.as_posix())
+
+    def load(self, iteration=-1):
+        if iteration == -1:
+            paths = [path for path in self.params.model_path.glob("*.pth")]
+            if not paths:
+                raise FileNotFoundError(
+                    "Could not load model weights. No .pth file found in {}".format(self.params.model_path))
+            paths.sort()
+            path = paths[-1]
+        else:
+            path = self.params.model_path / "{0:7d}_net.pth}".format(iteration)
+
+        assert path.is_file(), "Could not find the model weights for iteration {}: {}".format(iteration, path)
+        self.load_state_dict(torch.load(path.as_posix(), map_location=self.params.device))
+
+    def say(self, msg: str) -> None:
+        print("network {} says: {}".format(self.params.name, msg))
+
+
+def conv_stage(k_size: List[int],
+               in_channels: int,
+               out_channels: int,
+               channels: Optional[List[int]]=None,
+               stride: Union[List[int], int]=1,
+               padding: Optional[str]=None,
+               pooling: Optional[List[bool]]=None,
+               norm_layer: Optional[str]="batch",
+               bias=True,
+               relu=True) -> nn.Module:
+
+    assert isinstance(k_size, list)
+    num_stages = len(k_size)
+
+    if isinstance(stride, int):
+        s = num_stages * [stride]
+    else:
+        assert len(stride) == num_stages
+        s = stride
+
+    if channels is not None:
+        assert num_stages - 1 == len(channels)
+        in_chs = [in_channels] + channels
+        out_chs = channels + [out_channels]
+    else:
+        in_chs = num_stages * [out_channels]
+        out_chs = in_chs
+        in_chs[0] = in_channels
+
+    if padding is None:
+        pad = num_stages * [0]
+        pad_func = None
+    elif padding == "zero":
+        pad = list(map(lambda x: x // 2, k_size))
+        pad_func = torch.nn.ZeroPad2d
+    else:
+        raise ValueError("Unknown padding layer: {}".format(padding))
+
+    if pooling is None:
+        pool = num_stages * [False]
+    else:
+        assert len(pooling) == num_stages
+        pool = pooling
+
+    if norm_layer is None:
+        norm = None
+    elif norm_layer == "batch":
+        norm = nn.BatchNorm2d
+    elif norm_layer == "instance":
+        norm = nn.InstanceNorm2d
+    else:
+        raise ValueError("Unknown normalization layer: {}".format(norm_layer))
+
+    model = []
+    for i in range(num_stages):
+        if pad[i]:
+            model += [pad_func(pad[i])]
+        model += [nn.Conv2d(in_chs[i], out_chs[i], k_size[i], s[i], bias=bias)]
+        if pool:
+            model += [nn.MaxPool2d(2)]
+        if norm is not None:
+            model += [norm(out_chs[i])]
+        if relu:
+            model += [nn.ReLU(True)]
+
+    return nn.Sequential(*model)
 
 
 def _num_flat_features(x):

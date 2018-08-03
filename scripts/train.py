@@ -408,6 +408,7 @@ class MySpecialMSELoss:
         out = self.softmax(result)
         dist = torch.zeros(out.shape, device=out.device)
         for idx, lbl in enumerate(label):
+            lbl = int(lbl.item())
             if lbl == 0:
                 dist[idx, 0] = 0.6
                 dist[idx, 1] = 0.3
