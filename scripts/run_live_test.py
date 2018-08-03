@@ -42,6 +42,8 @@ def get_controller(args: Any) -> src.controllers.Controller:
                                                           pathlib.Path(
                                                               "/home/dominik/dataspace/models/rnn_randomwalk_forward/"
                                                               "run5_step_40000.pth"))
+    elif args.controller == "intention":
+        controller = src.controllers.IntentionController(11, (-4.0, 4.0), pathlib.Path(controller_args["model_path"]))
     else:
         raise ValueError("Unknown controller: {}".format(args.controller))
 

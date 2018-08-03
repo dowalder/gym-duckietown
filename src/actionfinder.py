@@ -2,18 +2,11 @@
 
 import pathlib
 import random
-from typing import List
 
 import numpy as np
 
 from gym_duckietown.envs import GeneratorEnv
 import src.controllers
-
-
-def omega_to_wheels(omega, v, wheel_dist=0.1) -> List[float]:
-    v_left = v + 0.5 * omega * wheel_dist
-    v_right = v - 0.5 * omega * wheel_dist
-    return [v_left, v_right]
 
 
 class DiscreteActionFinder:
@@ -65,7 +58,7 @@ class CNNActionFinder(src.controllers.OmegaController):
         img = env.render_obs()
         angle = float(self.cnn(self._transform(img)))
 
-        return np.array(omega_to_wheels(angle, self.v, self.wheel_dist)), angle
+        return np.array(src.controllers.omega_to_wheels(angle, self.v, self.wheel_dist)), angle
 
 
 class RandomWalker:
@@ -77,4 +70,4 @@ class RandomWalker:
 
     def find_action(self, env: GeneratorEnv):
         omega = (random.random() - 0.5) * 2 * self.max_omega
-        return np.array(omega_to_wheels(omega, self.v, self.wheel_dist)), omega
+        return np.array(src.controllers.omega_to_wheels(omega, self.v, self.wheel_dist)), omega

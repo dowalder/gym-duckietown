@@ -3,12 +3,19 @@
 import abc
 import collections
 import pathlib
+from typing import Tuple, List
 
 import torch
 import torchvision
 import numpy as np
 
 import src.networks
+
+
+def omega_to_wheels(omega, v, wheel_dist=0.1) -> List[float]:
+    v_left = v + 0.5 * omega * wheel_dist
+    v_right = v - 0.5 * omega * wheel_dist
+    return [v_left, v_right]
 
 
 class Controller(abc.ABC):
@@ -156,3 +163,34 @@ class FixDisturbController(Controller):
             self.modifier += mod
         self.modifier /= len(self.modifier_queue)
         print(self.modifier)
+
+
+class IntentionController(Controller):
+
+    def __init__(self, num_bins: int, limits: Tuple[float, float], checkpoint_path: pathlib.Path, device="cuda:0"):
+        assert len(limits) == 2 and limits[0] < limits[1]
+        low, up = limits
+        diff = float(up )
+        self.idx_to_omega = [low + diff / 2.0 / num_bins + i * diff / num_bins for i in range(num_bins)]
+        self.cnn = src.networks.DiscreteActionNet(num_bins)
+        self.cnn.load_state_dict(torch.load(checkpoint_path.as_posix(), map_location=device))
+        self.softmax = torch.nn.Softmax()
+
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.Resize((120, 160)),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda x: x.unsqueeze(0))
+        ])
+
+        print(self.idx_to_omega)
+
+    def step(self, img: np.ndarray):
+        out = self.transform(img)
+        with torch.no_grad():
+            out = self.cnn(out)
+            out = self.softmax(out)
+        idx = np.argmax(out).item()
+        omega = self.idx_to_omega[idx]
+
+        return np.array(omega_to_wheels(omega, 0.2))
