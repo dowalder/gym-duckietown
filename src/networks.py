@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Tuple
 
 import torch
 import torch.nn as nn
@@ -16,17 +16,41 @@ class BaseModel(nn.Module):
     def __init__(self, params: src.params.Params):
         super(BaseModel, self).__init__()
         self.iteration = 0
-        self.train_error = []
-        self.test_error = {}
 
         self.params = params
 
-    def forward(self):
-        pass
+        self.optim = None
+        self.criterion = None
 
-    def save(self) -> None:
-        path = self.params.model_path / "{0:7d}_net.pth"
+    def forward(self, x):
+        raise NotImplemented()
+
+    def training_step(self, samples, labels):
+        self.optim.zero_grad()
+        out = self.forward(samples)
+        loss = self.criterion(out, labels)
+        loss.backward()
+        self.optim.step()
+        self.iteration += 1
+        return loss.item()
+
+    def testing_step(self, samples, labels):
+        with torch.no_grad():
+            out = self.forward(samples)
+            loss = self.criterion(out, labels)
+        return loss.item()
+
+    def init(self):
+        self.optim = load_optimizer(self)
+        self.criterion = load_criterion(self)
+        self.apply(weights_init)
+        (self.params.model_path / "conf.yaml").write_text(self.params.conf_file_text())
+
+    def save(self, verbose=False) -> None:
+        path = self.params.model_path / "{0:07d}_net.pth".format(self.iteration)
         torch.save(self.state_dict(), path.as_posix())
+        if verbose:
+            self.say("Saved model at {}".format(path))
 
     def load(self, iteration=-1):
         if iteration == -1:
@@ -36,28 +60,51 @@ class BaseModel(nn.Module):
                     "Could not load model weights. No .pth file found in {}".format(self.params.model_path))
             paths.sort()
             path = paths[-1]
+            try:
+                self.iteration = int(path.name.split("_")[0])
+            except Exception as e:
+                print("Could not load the last iteration number. Starting from 0: {}".format(e))
+
         else:
-            path = self.params.model_path / "{0:7d}_net.pth}".format(iteration)
+            path = self.params.model_path / "{0:07d}_net.pth}".format(iteration)
+            self.iteration = iteration
 
         assert path.is_file(), "Could not find the model weights for iteration {}: {}".format(iteration, path)
         self.load_state_dict(torch.load(path.as_posix(), map_location=self.params.device))
 
     def say(self, msg: str) -> None:
-        print("network {} says: {}".format(self.params.name, msg))
+        with (self.params.model_path / "out.txt").open("a") as fid:
+            fid.write(msg + "\n")
+        print(msg)
 
 
-def conv_stage(k_size: List[int],
+def load_optimizer(net: BaseModel):
+    if net.params.optimizer == "adam":
+        return torch.optim.Adam(net.parameters(), **net.params.optimizer_params)
+    else:
+        raise ValueError("Unknown optimizer: {}".format(net.params.optimizer))
+
+
+def load_criterion(net: BaseModel):
+    if net.params.criterion == "MSE":
+        return torch.nn.MSELoss(**net.params.criterion_params)
+    else:
+        raise ValueError("Unknown criterion: {}".format(net.params.criterion))
+
+
+def conv_stage(k_size: Tuple[int, ...],
                in_channels: int,
                out_channels: int,
-               channels: Optional[List[int]]=None,
-               stride: Union[List[int], int]=1,
-               padding: Optional[str]=None,
-               pooling: Optional[List[bool]]=None,
+               channels: Optional[Tuple[int, ...]]=None,
+               stride: Union[Tuple[int, ...], int]=1,
+               padding_size: Optional[Union[Tuple[int, ...], int]]=None,
+               padding_type: str="zero",
+               pooling: Optional[Tuple[bool, ...]]=None,
                norm_layer: Optional[str]="batch",
                bias=True,
                relu=True) -> nn.Module:
 
-    assert isinstance(k_size, list)
+    assert isinstance(k_size, tuple)
     num_stages = len(k_size)
 
     if isinstance(stride, int):
@@ -68,21 +115,25 @@ def conv_stage(k_size: List[int],
 
     if channels is not None:
         assert num_stages - 1 == len(channels)
-        in_chs = [in_channels] + channels
-        out_chs = channels + [out_channels]
+        in_chs = (in_channels,) + channels
+        out_chs = channels + (out_channels,)
     else:
         in_chs = num_stages * [out_channels]
         out_chs = in_chs
         in_chs[0] = in_channels
 
-    if padding is None:
-        pad = num_stages * [0]
-        pad_func = None
-    elif padding == "zero":
-        pad = list(map(lambda x: x // 2, k_size))
+    if padding_size is None:
+        pad = tuple(num_stages * [0])
+    elif isinstance(padding_size, int):
+        pad = tuple(num_stages * [padding_size])
+    else:
+        assert len(padding_size) == num_stages
+        pad = padding_size
+
+    if padding_type == "zero":
         pad_func = torch.nn.ZeroPad2d
     else:
-        raise ValueError("Unknown padding layer: {}".format(padding))
+        raise ValueError("Unknown padding layer: {}".format(padding_type))
 
     if pooling is None:
         pool = num_stages * [False]
@@ -104,7 +155,7 @@ def conv_stage(k_size: List[int],
         if pad[i]:
             model += [pad_func(pad[i])]
         model += [nn.Conv2d(in_chs[i], out_chs[i], k_size[i], s[i], bias=bias)]
-        if pool:
+        if pool[i]:
             model += [nn.MaxPool2d(2)]
         if norm is not None:
             model += [norm(out_chs[i])]
@@ -133,6 +184,31 @@ def weights_init(m):
         nn.init.xavier_uniform_(m.weight)
     elif classname.find('Linear') != -1:
         nn.init.xavier_uniform_(m.weight)
+
+
+class BasicLaneFollower(BaseModel):
+
+    def __init__(self, params: src.params.Params):
+        super(BasicLaneFollower, self).__init__(params=params)
+        color = params.get("color", no_raise=True)
+        in_channels = 1 if color == "gray" else 3
+        self.conv = conv_stage(k_size=(7, 5, 5, 5),
+                               in_channels=in_channels,
+                               out_channels=64,
+                               channels=(16, 32, 64),
+                               stride=2,
+                               padding_size=(3, 2, 2, 2),
+                               relu=True,
+                               norm_layer=None)
+        self.fc1 = nn.Linear(10 * 5 * 64, 1024)
+        self.fc2 = nn.Linear(1024, 1)
+
+    def forward(self, x_in):
+        x = self.conv(x_in)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
 
 
 class SimpleCNN(nn.Module):

@@ -5,6 +5,9 @@ from typing import List
 
 
 def str_to_list(string: str, need_exist=False, create=False, sep=",", is_dir=False) -> List[Path]:
+    """
+    Creates a list of pathlib.Paths from a comma (or else) separated list.
+    """
     paths = [Path(path) for path in string.split(sep)]
     if create:
         for path in paths:
