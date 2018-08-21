@@ -3,13 +3,15 @@
 import abc
 import collections
 import pathlib
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import torch
 import torchvision
 import numpy as np
 
 import src.networks
+import src.params
+import src.graphics
 
 
 def omega_to_wheels(omega, v, wheel_dist=0.1) -> List[float]:
@@ -58,6 +60,44 @@ class OmegaController(Controller):
         vel_right = (self.v - 0.5 * angle * self.wheel_dist) * self.speed_factor
 
         return np.array([vel_left, vel_right])
+
+
+class DiscreteAction(Controller):
+
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
+        low = params.get("action_min", no_raise=False)
+        up = params.get("action_max", no_raise=False)
+        assert low < up, "low = {}, up = {}".format(low, up)
+
+        num_actions = params.get("num_actions", no_raise=False)
+        img_size = params.get("image_size", no_raise=True)
+        img_size = (120, 160) if img_size is None else src.graphics.size_from_string(img_size)
+
+        diff = float(up - low)
+        self.idx_to_omega = [low + diff / 2.0 / num_actions + i * diff / num_actions for i in range(num_actions)]
+        self.cnn = src.networks.ActionEstimator(params)
+        self.cnn.load()
+
+        self.softmax = torch.nn.Softmax()
+
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToPILImage(),
+            torchvision.transforms.Resize(img_size),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda x: x.unsqueeze(0))
+        ])
+
+        print(self.idx_to_omega)
+
+    def step(self, img: np.ndarray):
+        out = self.transform(img)
+        with torch.no_grad():
+            out = self.cnn(out)
+            out = self.softmax(out)
+        idx = np.argmax(out).item()
+        omega = self.idx_to_omega[idx]
+
+        return np.array(omega_to_wheels(omega, 0.2))
 
 
 class DirectAction(Controller):

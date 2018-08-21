@@ -1,8 +1,21 @@
 #!/usr/bin/env python3
 import random
+from typing import Tuple
 
 import cv2
 import numpy as np
+
+
+def size_from_string(size: str) -> Tuple[int, int]:
+    msg = None
+    try:
+        new_size = tuple(map(int, size.strip().split(",")))
+        assert len(new_size) == 2
+    except Exception as e:
+        msg = "Expected H,W got {}. e.what(): {}".format(size, e)
+    if msg is not None:
+        raise ValueError(msg)
+    return new_size
 
 
 def create_gradient(size=(120, 160), hor=True, ver=True, low=0.3):

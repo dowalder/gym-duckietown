@@ -2,34 +2,21 @@
 
 import argparse
 import time
-from pathlib import Path
-from typing import Dict, Any
 
-import yaml
 import torch
 import torch.utils.data
 
 import src.params
 import src.networks
-import src.datasetv2 as dataset
+import src.options
 
 
-def load_network(params: src.params.Params):
-    if params.network == "BasicLaneFollower":
-        return src.networks.BasicLaneFollower(params)
-    else:
-        raise ValueError("Unknown network: {}".format(params.network))
-
-
-def load_datasets(params: src.params.Params):
-    if params.data_set == "singleimage":
-        train_loader = torch.utils.data.DataLoader(dataset.SingleImage(params.train_path, params),
-                                                   batch_size=params.batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(dataset.SingleImage(params.test_path, params),
-                                                  batch_size=params.batch_size, shuffle=True)
-        return train_loader, test_loader
-    else:
-        raise ValueError("Unknown dataset: {}".format(params.data_set))
+def load_datasets(params: src.params.TrainParams):
+    train_loader = torch.utils.data.DataLoader(src.options.choose_dataset(params.data_set, params.train_path, params),
+                                               batch_size=params.batch_size, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(src.options.choose_dataset(params.data_set, params.test_path, params),
+                                              batch_size=params.batch_size, shuffle=True)
+    return train_loader, test_loader
 
 
 def train(net: src.networks.BaseModel, train_set, test_set):
@@ -55,7 +42,8 @@ def train(net: src.networks.BaseModel, train_set, test_set):
             if net.iteration % net.params.save_interval == 0:
                 net.save(verbose=True)
 
-        net.say("epoch {} finished. took {:4.2f}s".format(epoch, time.time() - t))
+        net.say("finished epoch {}. took {:4.2f}s".format(epoch + 1, time.time() - t))
+        net.say("-" * 50)
 
 
 def main():
@@ -65,14 +53,15 @@ def main():
     parser.add_argument("--name", "-n", required=True, type=str, help="give a name")
 
     args = parser.parse_args()
-    params = src.params.Params(args.conf, args.name)
+    params = src.params.TrainParams(args.conf, args.name)
 
-    net = load_network(params)
-    print(net)
-    net.init()
+    net = src.options.choose_network(params.network, params)
+    net.init_training()
     net.say(50 * "=")
-    net.say("Starting training named {}:\nnetwork: {}\ndataset: {}\n\n{}\n\n".format(
-        args.name, params.network, params.train_path, str(net)))
+    net.say("Starting training named {}".format(args.name))
+    net.say("network: {}".format(params.network))
+    net.say("dataset: {}, path: {}".format(params.data_set, params.train_path))
+    net.say("\n{}\n".format(str(net)))
     net.say("moving network to device {}".format(params.device))
     net.to(params.device)
     net.say("loading data sets")

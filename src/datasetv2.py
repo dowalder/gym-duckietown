@@ -14,17 +14,12 @@ import numpy as np
 import cv2
 
 import src.params
-
-
-def size_from_string(size: str) -> Tuple[int, int]:
-    new_size = tuple(map(int, size.strip().split(",")))
-    assert len(new_size) == 2, "Expected H,W got {}".format(size)
-    return new_size
+import src.graphics
 
 
 class Base(torch.utils.data.Dataset):
 
-    def __init__(self, data_dir: pathlib.Path, params: Optional[src.params.Params]=None):
+    def __init__(self, data_dir: pathlib.Path, params: Optional[src.params.TrainParams]=None):
         self.data_in_memory = []
         self.labels = []
         self.data_dir = data_dir
@@ -69,7 +64,7 @@ class SingleImage(Base):
 
         color = self.params.get("color", no_raise=True)
         size = self.params.get("image_size", no_raise=True)
-        size = size_from_string(size) if size is not None else (120, 160)
+        size = src.graphics.size_from_string(size) if size is not None else (120, 160)
 
         transf = [transforms.Grayscale()] if color == "gray" else []
         self.transform = transforms.Compose(transf + [

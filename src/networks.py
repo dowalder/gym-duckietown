@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
+import copy
 import pathlib
-from typing import Optional, List, Union, Tuple
+from typing import Optional, Union, Tuple
 
 import torch
 import torch.nn as nn
@@ -9,16 +10,18 @@ import torchvision.models.resnet
 
 import src.resnet
 import src.params
+import src.options
 
 
 class BaseModel(nn.Module):
 
-    def __init__(self, params: src.params.Params):
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
         super(BaseModel, self).__init__()
         self.iteration = 0
 
         self.params = params
 
+        self.train = False
         self.optim = None
         self.criterion = None
 
@@ -26,6 +29,8 @@ class BaseModel(nn.Module):
         raise NotImplemented()
 
     def training_step(self, samples, labels):
+        self._check_training()
+
         self.optim.zero_grad()
         out = self.forward(samples)
         loss = self.criterion(out, labels)
@@ -35,22 +40,30 @@ class BaseModel(nn.Module):
         return loss.item()
 
     def testing_step(self, samples, labels):
+        self._check_training()
+
         with torch.no_grad():
             out = self.forward(samples)
             loss = self.criterion(out, labels)
         return loss.item()
 
-    def init(self):
-        self.optim = load_optimizer(self)
-        self.criterion = load_criterion(self)
+    def init_training(self):
+        self.optim = src.options.choose_optimizer(
+            self.params.optimizer, self.parameters(), **self.params.optimizer_params)
+
+        self.criterion = src.options.choose_criterion(self.params.criterion, **self.params.criterion_params)
         self.apply(weights_init)
         (self.params.model_path / "conf.yaml").write_text(self.params.conf_file_text())
+        self.train = True
 
     def save(self, verbose=False) -> None:
         path = self.params.model_path / "{0:07d}_net.pth".format(self.iteration)
         torch.save(self.state_dict(), path.as_posix())
         if verbose:
             self.say("Saved model at {}".format(path))
+
+    def _load_from_path(self, path: pathlib.Path):
+        self.load_state_dict(torch.load(path.as_posix(), map_location=str(self.params.device)))
 
     def load(self, iteration=-1):
         if iteration == -1:
@@ -70,26 +83,16 @@ class BaseModel(nn.Module):
             self.iteration = iteration
 
         assert path.is_file(), "Could not find the model weights for iteration {}: {}".format(iteration, path)
-        self.load_state_dict(torch.load(path.as_posix(), map_location=self.params.device))
+        self._load_from_path(path)
 
     def say(self, msg: str) -> None:
         with (self.params.model_path / "out.txt").open("a") as fid:
             fid.write(msg + "\n")
         print(msg)
 
-
-def load_optimizer(net: BaseModel):
-    if net.params.optimizer == "adam":
-        return torch.optim.Adam(net.parameters(), **net.params.optimizer_params)
-    else:
-        raise ValueError("Unknown optimizer: {}".format(net.params.optimizer))
-
-
-def load_criterion(net: BaseModel):
-    if net.params.criterion == "MSE":
-        return torch.nn.MSELoss(**net.params.criterion_params)
-    else:
-        raise ValueError("Unknown criterion: {}".format(net.params.criterion))
+    def _check_training(self):
+        if not self.train:
+            raise RuntimeError("Training has not been initialized. Call init_training() first.")
 
 
 def conv_stage(k_size: Tuple[int, ...],
@@ -188,7 +191,7 @@ def weights_init(m):
 
 class BasicLaneFollower(BaseModel):
 
-    def __init__(self, params: src.params.Params):
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
         super(BasicLaneFollower, self).__init__(params=params)
         color = params.get("color", no_raise=True)
         in_channels = 1 if color == "gray" else 3
@@ -208,6 +211,78 @@ class BasicLaneFollower(BaseModel):
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
+        return x
+
+
+class ActionEstimator(BaseModel):
+
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
+        super(ActionEstimator, self).__init__(params=params)
+        color = params.get("color", no_raise=True)
+        in_channels = 1 if color == "gray" else 3
+
+        num_actions = params.get("num_actions", no_raise=False)
+        assert isinstance(num_actions, int), num_actions.__class__
+
+        self.conv = conv_stage(k_size=(7, 5, 5, 5),
+                               in_channels=in_channels,
+                               out_channels=64,
+                               channels=(16, 32, 64),
+                               stride=2,
+                               padding_size=(3, 2, 2, 2),
+                               relu=True,
+                               norm_layer=None)
+
+        self.fc1 = nn.Linear(10 * 5 * 64, 1024)
+        self.fc2 = nn.Linear(1024, num_actions)
+
+    def forward(self, x_in):
+        x = self.conv(x_in)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+
+class IntentionTranslator(BaseModel):
+
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
+        super(IntentionTranslator, self).__init__(params=params)
+        color = params.get("color", no_raise=True)
+        in_channels = 1 if color == "gray" else 3
+
+        num_actions = params.get("num_actions", no_raise=False)
+        assert isinstance(num_actions, int), num_actions.__class__
+
+        self.conv = conv_stage(k_size=(7, 5, 5, 5),
+                               in_channels=in_channels,
+                               out_channels=64,
+                               channels=(16, 32, 64),
+                               stride=2,
+                               padding_size=(3, 2, 2, 2),
+                               relu=True,
+                               norm_layer=None)
+
+        action_estimator_weights = params.get("action_estimator_weights", no_raise=False)
+        self.action_estimator = ActionEstimator(copy.deepcopy(params))
+        self.action_estimator.params.model_path = action_estimator_weights
+        self.action_estimator.load()
+
+        self.fc1 = nn.Linear(10 * 5 * 64, 1024)
+
+        hidden_size = params.get("hidden_size", default=128)
+        num_layers = params.get("num_layers", default=1)
+        self.lstm = nn.LSTM(input_size=1024 + num_actions, hidden_size=hidden_size, num_layers=num_layers)
+
+    def forward(self, x_in):
+        with torch.no_grad():
+            actions = self.action_estimator(x_in)
+
+        x = self.conv(x_in)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = torch.cat(0, (x, actions))
+        x = self.lstm(x)
         return x
 
 
@@ -547,26 +622,26 @@ class SequenceCnn(nn.Module):
         return self._estimator(feature_vec)
 
 
-class ActionEstimator(nn.Module):
-
-    def __init__(self):
-        super(ActionEstimator, self).__init__()
-
-        self.cnn = SimpleCNN()
-
-        self.fc1 = nn.Linear(in_features=2048, out_features=512)
-        self.fc2 = nn.Linear(in_features=512, out_features=128)
-        self.fc3 = nn.Linear(in_features=128, out_features=2)
-
-    def forward(self, imgs):
-        assert imgs.shape[0] == 2
-
-        x = self.cnn(imgs)
-        x = torch.cat((x[0, :], x[1, :]))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+# class ActionEstimator(nn.Module):
+#
+#     def __init__(self):
+#         super(ActionEstimator, self).__init__()
+#
+#         self.cnn = SimpleCNN()
+#
+#         self.fc1 = nn.Linear(in_features=2048, out_features=512)
+#         self.fc2 = nn.Linear(in_features=512, out_features=128)
+#         self.fc3 = nn.Linear(in_features=128, out_features=2)
+#
+#     def forward(self, imgs):
+#         assert imgs.shape[0] == 2
+#
+#         x = self.cnn(imgs)
+#         x = torch.cat((x[0, :], x[1, :]))
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         x = self.fc3(x)
+#         return x
 
 
 class DiscreteActionNet(nn.Module):

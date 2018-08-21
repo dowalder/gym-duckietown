@@ -421,7 +421,7 @@ class MySpecialMSELoss:
                 dist[idx, lbl - 1] = 0.2
                 dist[idx, lbl] = 0.6
                 dist[idx, lbl + 1] = 0.2
-        return self.loss()
+        return self.loss(result, dist)
 
 
 def main():
