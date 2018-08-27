@@ -2,6 +2,7 @@
 
 import argparse
 import time
+import pathlib
 
 import torch
 import torch.utils.data
@@ -11,11 +12,18 @@ import src.networks
 import src.options
 
 
+def load_dataloader(dataset_path: pathlib.Path, params: src.params.TrainParams):
+    dataset = src.options.choose_dataset(params.data_set, dataset_path, params)
+    collate_fn = dataset.collate_fn()
+    if collate_fn is None:
+        return torch.utils.data.DataLoader(dataset, batch_size=params.batch_size, shuffle=True)
+    else:
+        return torch.utils.data.DataLoader(dataset, batch_size=params.batch_size, shuffle=True, collate_fn=collate_fn)
+
+
 def load_datasets(params: src.params.TrainParams):
-    train_loader = torch.utils.data.DataLoader(src.options.choose_dataset(params.data_set, params.train_path, params),
-                                               batch_size=params.batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(src.options.choose_dataset(params.data_set, params.test_path, params),
-                                              batch_size=params.batch_size, shuffle=True)
+    train_loader = load_dataloader(params.train_path, params)
+    test_loader = load_dataloader(params.test_path, params)
     return train_loader, test_loader
 
 
@@ -24,8 +32,8 @@ def train(net: src.networks.BaseModel, train_set, test_set):
     for epoch in range(net.params.num_epochs):
         t = time.time()
 
-        for samples, labels in train_set:
-            running_loss += net.training_step(samples, labels)
+        for data in train_set:
+            running_loss += net.training_step(data)
 
             if net.iteration % net.params.train_interval == 0:
                 net.say("[{}][{}]: train: {}".format(
@@ -34,8 +42,8 @@ def train(net: src.networks.BaseModel, train_set, test_set):
 
             if net.iteration % net.params.test_interval == 0:
                 error = []
-                for test_samples, test_labels in test_set:
-                    error.append(net.testing_step(test_samples, test_labels))
+                for test_data in test_set:
+                    error.append(net.testing_step(test_data))
                 error = sum(error) / len(error)
                 net.say("\ttest: {}".format(error))
 

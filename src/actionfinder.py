@@ -1,29 +1,53 @@
 #!/usr/bin/env python3
 
+"""
+Actionfinder are used as controllers for when ground truth data is available. This means they have access to the
+environment.
+"""
+
+import abc
 import pathlib
 import random
+from typing import Optional, Dict, Any
 
 import numpy as np
 
 from gym_duckietown.envs import GeneratorEnv
 import src.controllers
+import src.params
 
 
-class DiscreteActionFinder:
+class Result:
+
+    def __init__(self, action: np.ndarray, info: Dict[str, Any]):
+        self.action = action
+        self.info = info
+
+
+class Base(abc.ABC):
+
+    @abc.abstractmethod
+    def find_action(self, env: GeneratorEnv) -> Optional[Result]:
+        pass
+
+
+class BestDiscrete(Base):
     """
     Finds the correct action from a discrete set by trying every action and choosing the one with the highest reward.
     """
 
-    def __init__(self, delta_t=0.1, range=(-1.0, 1.0), resolution=201, v=0.5, wheel_dist=0.1):
-        assert isinstance(range, tuple), "got {}".format(range.__class__)
-        assert len(range) == 2, "got {}".format(len(range))
-        assert isinstance(resolution, int), "got {}".format(resolution.__class__)
-        assert resolution > 0, "got {}".format(resolution)
+    def __init__(self, params: src.params.DataGen):
+        low = params.get("action_min", no_raise=False)
+        up = params.get("action_max", no_raise=False)
+        assert low < up, "low: {}, up: {}".format(low, up)
+        resolution = params.get("action_resolution", no_raise=False)
+        assert 0 < resolution
+        wheel_dist = params.get("wheel_dist", default=0.1)
 
-        self.possible_omega = np.linspace(range[0], range[1], resolution)
-        self.left = v + 0.5 * self.possible_omega * wheel_dist
-        self.right = v - 0.5 * self.possible_omega * wheel_dist
-        self.delta_t = delta_t
+        self.possible_omega = np.linspace(low, up, resolution)
+        self.left = params.velocitiy + 0.5 * self.possible_omega * wheel_dist
+        self.right = params.velocitiy - 0.5 * self.possible_omega * wheel_dist
+        self.delta_t = params.delta_t
 
     def find_action(self, env: GeneratorEnv):
         """
@@ -46,28 +70,48 @@ class DiscreteActionFinder:
         if best_reward <= -20:
             return None
         else:
-            return best_action, best_omega
+            return Result(best_action, {"omega": best_omega})
 
 
-class CNNActionFinder(src.controllers.OmegaController):
+class CNNOmega(src.controllers.OmegaController):
 
-    def __init__(self, model_path: pathlib.Path):
-        super(CNNActionFinder, self).__init__(model_path=model_path)
+    def __init__(self, params: src.params.DataGen):
+        network_name = params.get("network_name", no_raise=False)
+        network_conf_file = params.get("network_conf_file", no_raise=False)
+        network_params = src.params.TestParams(network_conf_file, network_name)
+
+        super(CNNOmega, self).__init__(network_params)
 
     def find_action(self, env: GeneratorEnv):
         img = env.render_obs()
         angle = float(self.cnn(self._transform(img)))
 
-        return np.array(src.controllers.omega_to_wheels(angle, self.v, self.wheel_dist)), angle
+        return Result(np.array(src.controllers.omega_to_wheels(angle, self.v, self.wheel_dist)), {"omega": angle})
 
 
-class RandomWalker:
+class CNNDiscrete(src.controllers.DiscreteAction):
 
-    def __init__(self, v=0.2, max_omega=4.0, wheel_dist=0.1):
-        self.max_omega = max_omega
-        self.v = v
-        self.wheel_dist = wheel_dist
+    def __init__(self, params: src.params.DataGen):
+        network_name = params.get("network_name", no_raise=False)
+        network_conf_file = params.get("network_conf_file", no_raise=False)
+        network_params = src.params.TestParams(network_conf_file, network_name)
+
+        super(CNNDiscrete, self).__init__(network_params)
+
+    def find_action(self, env: GeneratorEnv):
+        img = env.render_obs()
+        action = self.step(img)
+
+        return Result(action, self.last_step)
+
+
+class RandomWalker(Base):
+
+    def __init__(self, params: src.params.DataGen):
+        self.v = params.velocitiy
+        self.max_omega = params.get("max_omega", default=4.0)
+        self.wheel_dist = params.get("wheel_dist", default=0.1)
 
     def find_action(self, env: GeneratorEnv):
         omega = (random.random() - 0.5) * 2 * self.max_omega
-        return np.array(src.controllers.omega_to_wheels(omega, self.v, self.wheel_dist)), omega
+        return Result(np.array(src.controllers.omega_to_wheels(omega, self.v, self.wheel_dist)), {"omega": omega})

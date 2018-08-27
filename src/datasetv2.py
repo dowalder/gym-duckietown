@@ -3,8 +3,8 @@
 import pathlib
 import PIL.Image
 import yaml
-import csv
-from typing import Union, Tuple, Optional, Callable
+import collections
+from typing import Union, Tuple, Optional, Callable, Dict, List
 
 import torch
 import torch.utils.data
@@ -23,7 +23,6 @@ class Base(torch.utils.data.Dataset):
         self.data_in_memory = []
         self.labels = []
         self.data_dir = data_dir
-        self.transform = None  # type: Optional[Callable]
         self._len = None  # type: Optional[int]
         self.params = params
         self._init_data()
@@ -48,6 +47,10 @@ class Base(torch.utils.data.Dataset):
         if self.params.data_in_memory:
             return self.data_in_memory[item]
         return self._load_item(item)
+
+    @staticmethod
+    def collate_fn():
+        return None
 
 
 class SingleImage(Base):
@@ -77,6 +80,76 @@ class SingleImage(Base):
         if img is None:
             raise IOError("Could not read the image {}".format(self.images[item]))
         return self.transform(img).to(self.params.device), torch.Tensor(self.labels[item]).to(self.params.device)
+
+
+class Sequence(Base):
+
+    def _init_data(self):
+        color = self.params.get("color", no_raise=True)
+        self.grayscale = color == "gray" if color is not None else False
+        self.datapoints = self.params.get("datapoints", no_raise=False)
+
+        self.seq_len = self.params.get("sequence_length", no_raise=False)
+
+        size = self.params.get("image_size", no_raise=True)
+        self.img_size = src.graphics.size_from_string(size) if size is not None else (120, 160)
+
+        transf = [transforms.Grayscale()] if self.grayscale else []
+        self.transform = transforms.Compose(transf + [
+            transforms.Resize(self.img_size),
+            transforms.ToTensor(),
+        ])
+
+        self._sequences = []
+        for path in self.data_dir.iterdir():
+            if path.suffix == ".yaml":
+                data = yaml.load(path.read_text())
+                if len(data) < self.seq_len:
+                    print("WARNING: seq_len is too long for this data sequence: {}".format(path))
+                    continue
+                for i in range(0, len(data), self.seq_len):
+                    self._sequences.append(data[i:i + self.seq_len])
+
+        if not self._sequences:
+            raise ValueError("Empty dataset: {}".format(self.data_dir))
+        self._len = len(self._sequences)
+
+    def _load_item(self, item):
+        seq = self._sequences[item]
+        datapoint = {}
+        if "imgs" in self.datapoints:
+            channels = 1 if self.grayscale else 3
+            imgs = torch.empty(size=(self.seq_len, channels, self.img_size[0], self.img_size[1]),
+                               dtype=torch.float,
+                               device=self.params.device)
+            for idx, info in enumerate(seq):
+                img = PIL.Image.open((self.data_dir / info["path"]).as_posix())
+                if img is None:
+                    raise RuntimeError("Could not find the image at: {}".format(info["path"]))
+
+                imgs[idx, :, :, :] = self.transform(img)
+            datapoint["imgs"] = imgs
+
+        if "actions" in self.datapoints:
+            actions = torch.empty(size=(self.seq_len, 2), dtype=torch.float, device=self.params.device)
+            for idx, info in enumerate(seq):
+                actions[idx, :] = torch.Tensor(info["action"])
+            datapoint["actions"] = actions
+
+        if "modifiers" in self.datapoints:
+            modifiers = torch.empty(size=(self.seq_len, 2), dtype=torch.float, device=self.params.device)
+            for idx, info in enumerate(seq):
+                modifiers[idx, :] = torch.Tensor(info["modifier"])
+            datapoint["modifiers"] = modifiers
+
+        if "softmax" in self.datapoints:
+            num_actions = self.params.get("num_actions", no_raise=False)
+            softmax = torch.empty(size=(self.seq_len, num_actions), dtype=torch.float, device=self.params.device)
+            for idx, info in enumerate(seq):
+                softmax[idx, :] = torch.Tensor(info["softmax"])
+            datapoint["softmax"] = softmax
+
+        return datapoint
 
 
 # class AurelDataSet(DataSet):
@@ -146,74 +219,6 @@ class SingleImage(Base):
 #         return torch.Tensor(self.labels[item + self.n] + self.labels[item + self.n + 1]), self.transform(img)
 #
 #
-# class RNNDataSet(torch.utils.data.Dataset):
-#
-#     def __init__(self,
-#                  data_dir: pathlib.Path,
-#                  seq_length: Union[int, Tuple[int, int]],
-#                  device="cpu",
-#                  img_size=(120, 160),
-#                  grayscale=False,
-#                  in_memory=False):
-#         self.length = seq_length
-#         self.sequences = []
-#         self.dir = data_dir
-#         self.img_size = img_size
-#         for path in data_dir.iterdir():
-#             if path.suffix == ".yaml":
-#                 self.sequences.append(yaml.load(path.read_text()))
-#
-#         transforms_list = [transforms.Resize(img_size)]
-#         if grayscale:
-#             transforms_list.append(transforms.Grayscale())
-#         transforms_list.append(transforms.ToTensor())
-#         self.transform = transforms.Compose(transforms_list)
-#         self.device = torch.device(device)
-#         self.grayscale = grayscale
-#
-#         self.imgs = []
-#         self.actions = []
-#         self.lbls = []
-#
-#         self.in_memory = False
-#         if in_memory:
-#             for idx in range(len(self.sequences)):
-#                 img, action, lbl = self.__getitem__(idx)
-#                 self.imgs.append(img)
-#                 self.actions.append(action)
-#                 self.lbls.append(lbl)
-#             self.in_memory = True
-#
-#     def __len__(self):
-#         return len(self.sequences)
-#
-#     def __getitem__(self, item):
-#         if self.in_memory:
-#             return self.imgs[item], self.actions[item], self.lbls[item]
-#
-#         seq = self.sequences[item]
-#         length = np.random.randint(self.length[0], self.length[1]) if isinstance(self.length, tuple) else self.length
-#         if length >= len(seq):
-#             length = len(seq) - 1
-#
-#         start_idx = np.random.randint(0, len(seq) - length)
-#
-#         channels = 1 if self.grayscale else 3
-#         imgs = torch.empty(
-#             size=(length, channels, self.img_size[0], self.img_size[1]), dtype=torch.float, device=self.device)
-#         actions = torch.empty(size=(length, 2), dtype=torch.float, device=self.device)
-#         lbls = torch.empty(size=(length, 2), dtype=torch.float, device=self.device)
-#
-#         for idx, img_info in enumerate(seq[start_idx:start_idx + length]):
-#             img = PIL.Image.open((self.dir / img_info["path"]).as_posix())
-#             if img is None:
-#                 raise RuntimeError("Could not find the image at: {}".format(img_info["path"]))
-#
-#             imgs[idx, :, :, :] = self.transform(img)
-#             actions[idx, :] = torch.Tensor(img_info["action"])
-#             lbls[idx, :] = torch.Tensor(img_info["modifier"])
-#
-#         return imgs, actions, lbls
 #
 #
 # if __name__ == "__main__":

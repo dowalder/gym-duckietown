@@ -38,10 +38,10 @@ class OmegaController(Controller):
     Loads the standard net that computes omega.
     """
 
-    def __init__(self, model_path: pathlib.Path):
+    def __init__(self, params: src.params.Params):
 
-        self.cnn = src.networks.InitialNet()
-        self.cnn.load_state_dict(torch.load(model_path.as_posix()))
+        self.cnn = src.networks.BasicLaneFollower(params)
+        self.cnn.load()
         self.v = 0.2
         self.wheel_dist = 0.1
         self.speed_factor = 1.0
@@ -87,7 +87,7 @@ class DiscreteAction(Controller):
             torchvision.transforms.Lambda(lambda x: x.unsqueeze(0))
         ])
 
-        print(self.idx_to_omega)
+        self.last_step = None
 
     def step(self, img: np.ndarray):
         out = self.transform(img)
@@ -96,8 +96,9 @@ class DiscreteAction(Controller):
             out = self.softmax(out)
         idx = np.argmax(out).item()
         omega = self.idx_to_omega[idx]
-
-        return np.array(omega_to_wheels(omega, 0.2))
+        action = np.array(omega_to_wheels(omega, 0.2))
+        self.last_step = {"omega": omega, "softmax": out.squeeze().tolist()}
+        return action
 
 
 class DirectAction(Controller):

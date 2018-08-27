@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import copy
+import itertools
 import pathlib
 from typing import Optional, Union, Tuple
 
@@ -21,16 +21,17 @@ class BaseModel(nn.Module):
 
         self.params = params
 
-        self.train = False
+        self.training_mode = False
         self.optim = None
         self.criterion = None
 
     def forward(self, x):
         raise NotImplemented()
 
-    def training_step(self, samples, labels):
+    def training_step(self, data):
         self._check_training()
 
+        samples, labels = data
         self.optim.zero_grad()
         out = self.forward(samples)
         loss = self.criterion(out, labels)
@@ -39,9 +40,10 @@ class BaseModel(nn.Module):
         self.iteration += 1
         return loss.item()
 
-    def testing_step(self, samples, labels):
+    def testing_step(self, data):
         self._check_training()
 
+        samples, labels = data
         with torch.no_grad():
             out = self.forward(samples)
             loss = self.criterion(out, labels)
@@ -54,7 +56,7 @@ class BaseModel(nn.Module):
         self.criterion = src.options.choose_criterion(self.params.criterion, **self.params.criterion_params)
         self.apply(weights_init)
         (self.params.model_path / "conf.yaml").write_text(self.params.conf_file_text())
-        self.train = True
+        self.training_mode = True
 
     def save(self, verbose=False) -> None:
         path = self.params.model_path / "{0:07d}_net.pth".format(self.iteration)
@@ -91,7 +93,7 @@ class BaseModel(nn.Module):
         print(msg)
 
     def _check_training(self):
-        if not self.train:
+        if not self.training_mode:
             raise RuntimeError("Training has not been initialized. Call init_training() first.")
 
 
@@ -263,27 +265,65 @@ class IntentionTranslator(BaseModel):
                                relu=True,
                                norm_layer=None)
 
-        action_estimator_weights = params.get("action_estimator_weights", no_raise=False)
-        self.action_estimator = ActionEstimator(copy.deepcopy(params))
-        self.action_estimator.params.model_path = action_estimator_weights
-        self.action_estimator.load()
-
         self.fc1 = nn.Linear(10 * 5 * 64, 1024)
 
-        hidden_size = params.get("hidden_size", default=128)
+        self.hidden_size = params.get("hidden_size", default=128)
         num_layers = params.get("num_layers", default=1)
-        self.lstm = nn.LSTM(input_size=1024 + num_actions, hidden_size=hidden_size, num_layers=num_layers)
+        self.lstm = nn.LSTM(input_size=1024 + num_actions, hidden_size=self.hidden_size, num_layers=num_layers)
+        self.fc_lstm = nn.Linear(self.hidden_size, 2)
 
     def forward(self, x_in):
-        with torch.no_grad():
-            actions = self.action_estimator(x_in)
-
-        x = self.conv(x_in)
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = torch.cat(0, (x, actions))
-        x = self.lstm(x)
+        imgs, softmax = x_in
+        sequence_length = imgs.size(1)
+        # iterate through the dimension of the sequence
+        for idx in range(sequence_length):
+            img = imgs[:, idx, :, :, :]
+            x = self.conv(img)
+            x = x.view(x.size(0), -1)
+            x = F.relu(self.fc1(x))
+            x = torch.cat((x, softmax[:, idx, :]), 1)
+            if idx == 0:
+                _, hidden = self.lstm(x.unsqueeze(0))
+            else:
+                _, hidden = self.lstm(x.unsqueeze(0), hidden)
+        # Take the last hidden state
+        x = self.fc_lstm(hidden[0][-1])
         return x
+
+    def training_step(self, data):
+        self._check_training()
+        assert all(key in data for key in ["imgs", "actions", "modifiers", "softmax"]), data.keys()
+
+        self.optim.zero_grad()
+        out = self.forward((data["imgs"], data["softmax"]))
+        loss = self.criterion(out, data["actions"][:, -1, :] * data["modifiers"][:, -1, :])
+        loss.backward()
+        self.optim.step()
+        self.iteration += 1
+        return loss.item()
+
+    def testing_step(self, data):
+        assert all(key in data for key in ["imgs", "actions", "modifiers", "softmax"]), data.keys()
+
+        with torch.no_grad():
+            out = self.forward((data["imgs"], data["softmax"]))
+            loss = self.criterion(out, data["actions"][:, -1, :] * data["modifiers"][:, -1, :])
+        return loss.item()
+
+
+class ITSharedWeights(IntentionTranslator):
+
+    def __init__(self, params: Union[src.params.TrainParams, src.params.TestParams]):
+        super(ITSharedWeights, self).__init__(params)
+        ae_conf_path = params.get("actionestimator_conf_path", no_raise=False)
+        ae_name = params.get("actionestimator_name", no_raise=False)
+        ae_params = src.params.TestParams(ae_conf_path, ae_name)
+        actionestimator = ActionEstimator(ae_params)
+        actionestimator.load()
+        self.conv = actionestimator.conv
+
+    def parameters(self):
+        return itertools.chain(self.fc1.parameters(), self.lstm.parameters(), self.fc_lstm.parameters())
 
 
 class SimpleCNN(nn.Module):

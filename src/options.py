@@ -8,6 +8,7 @@ import src.networks
 import src.datasetv2 as dataset
 import src.losses
 import src.controllers
+import src.actionfinder
 
 
 def _choose(option: str, options: Dict[str, Callable], name: str,  *args, **kwargs) -> Any:
@@ -22,6 +23,8 @@ def choose_network(network: str, *args, **kwargs):
     options = {
         "BasicLaneFollower": src.networks.BasicLaneFollower,
         "ActionEstimator": src.networks.ActionEstimator,
+        "IntentionTranslator": src.networks.IntentionTranslator,
+        "ITSharedWeights": src.networks.ITSharedWeights,
     }
     return _choose(network, options, "Networks", *args, **kwargs)
 
@@ -29,6 +32,7 @@ def choose_network(network: str, *args, **kwargs):
 def choose_dataset(data_set: str, *args, **kwargs) -> dataset.Base:
     options = {
         "SingleImage": dataset.SingleImage,
+        "Sequence": dataset.Sequence
     }
     return _choose(data_set, options, "DataSets", *args, **kwargs)
 
@@ -56,3 +60,13 @@ def choose_controller(controller: str, *args, **kwargs):
         "DiscreteAction": src.controllers.DiscreteAction,
     }
     return _choose(controller, options, "Controllers", *args, **kwargs)
+
+
+def choose_actionfinder(actionfinder: str, *args, **kwargs):
+    options = {
+        "BestDiscrete": src.actionfinder.BestDiscrete,
+        "CNNOmega": src.actionfinder.CNNOmega,
+        "Random": src.actionfinder.RandomWalker,
+        "CNNDiscrete": src.actionfinder.CNNDiscrete
+    }
+    return _choose(actionfinder, options, "Actionfinders", *args, **kwargs)
