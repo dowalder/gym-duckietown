@@ -12,7 +12,6 @@ from typing import Optional, Dict, Any
 
 import numpy as np
 
-from gym_duckietown.envs import GeneratorEnv
 import src.controllers
 import src.params
 
@@ -27,7 +26,7 @@ class Result:
 class Base(abc.ABC):
 
     @abc.abstractmethod
-    def find_action(self, env: GeneratorEnv) -> Optional[Result]:
+    def find_action(self, env) -> Optional[Result]:
         pass
 
 
@@ -49,7 +48,7 @@ class BestDiscrete(Base):
         self.right = params.velocitiy - 0.5 * self.possible_omega * wheel_dist
         self.delta_t = params.delta_t
 
-    def find_action(self, env: GeneratorEnv):
+    def find_action(self, env):
         """
         Finds the most rewarding action.
 
@@ -82,7 +81,7 @@ class CNNOmega(src.controllers.OmegaController):
 
         super(CNNOmega, self).__init__(network_params)
 
-    def find_action(self, env: GeneratorEnv):
+    def find_action(self, env):
         img = env.render_obs()
         angle = float(self.cnn(self._transform(img)))
 
@@ -98,7 +97,7 @@ class CNNDiscrete(src.controllers.DiscreteAction):
 
         super(CNNDiscrete, self).__init__(network_params)
 
-    def find_action(self, env: GeneratorEnv):
+    def find_action(self, env):
         img = env.render_obs()
         action = self.step(img)
 
@@ -112,6 +111,6 @@ class RandomWalker(Base):
         self.max_omega = params.get("max_omega", default=4.0)
         self.wheel_dist = params.get("wheel_dist", default=0.1)
 
-    def find_action(self, env: GeneratorEnv):
+    def find_action(self, env):
         omega = (random.random() - 0.5) * 2 * self.max_omega
         return Result(np.array(src.controllers.omega_to_wheels(omega, self.v, self.wheel_dist)), {"omega": omega})

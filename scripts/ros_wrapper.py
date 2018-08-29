@@ -25,8 +25,8 @@ def main():
     context = zmq.Context()
 
     if args.on_rudolf:
-        sub_topic = "tcp://localhost:54321"
-        pub_topic = "ipc://localhost:12345"
+        sub_topic = "tcp://127.0.0.1:54321"
+        pub_topic = "tcp://127.0.0.1:12345"
     else:
         sub_topic = "ipc:///home/dominik/tmp/image.zeromq"
         pub_topic = "ipc:///home/dominik/tmp/command.zeromq"
@@ -36,14 +36,14 @@ def main():
         subscriber.bind(sub_topic)
     else:
         subscriber.connect(sub_topic)
-        
+
     subscriber.setsockopt_string(zmq.SUBSCRIBE, "")
 
     publisher = context.socket(zmq.PUB)
     publisher.bind(pub_topic)
 
     print("Loading network...")
-    params = src.params.TestParams("/home/dominik/workspace/gym-duckietown/conf_files/basic_lanefollower.yaml",
+    params = src.params.TestParams("conf_files/basic_lanefollower.yaml",
                                    "domain_rand_gray_80_160")
     net = src.networks.BasicLaneFollower(params)
     net.load()
