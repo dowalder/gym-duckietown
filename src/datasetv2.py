@@ -65,15 +65,18 @@ class SingleImage(Base):
                 raise IOError("Could not find the label file {}".format(lbl_file))
             self.labels.append(list(map(float, lbl_file.read_text().strip().split())))
 
+        normalize = self.params.get("normalize", default=False)
         color = self.params.get("color", no_raise=True)
         size = self.params.get("image_size", no_raise=True)
         size = src.graphics.size_from_string(size) if size is not None else (120, 160)
 
         transf = [transforms.Grayscale()] if color == "gray" else []
-        self.transform = transforms.Compose(transf + [
-            transforms.Resize(size),
-            transforms.ToTensor(),
-        ])
+        transf.append(transforms.Resize(size))
+        transf.append(transforms.ToTensor())
+        if normalize:
+            transf.append(transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
+
+        self.transform = transforms.Compose(transf)
 
     def _load_item(self, item):
         img = PIL.Image.open(self.images[item].as_posix())

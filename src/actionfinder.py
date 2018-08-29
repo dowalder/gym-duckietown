@@ -70,7 +70,7 @@ class BestDiscrete(Base):
         if best_reward <= -20:
             return None
         else:
-            return Result(best_action, {"omega": best_omega})
+            return Result(best_action, {"omega": best_omega.item()})
 
 
 class CNNOmega(src.controllers.OmegaController):

@@ -65,12 +65,21 @@ def main():
 
     controller = src.options.choose_actionfinder(params.actionfinder, params)
 
+    keep_position_after_reset = params.get("keep_position_after_reset", no_raise=False)
+
     num_seq = 0
     while num_seq < params.num_seq:
         print("running on sequence: {}".format(num_seq))
         seq_dir = params.data_path / "seq_{0:05d}".format(num_seq)
         seq_dir.mkdir(exist_ok=True, parents=True)
+
+        old_pos = env.cur_pos
+        old_angle = env.cur_angle
         obs = env.reset(perturb_factor=float(params.perturb_factor))
+
+        if keep_position_after_reset:
+            env.cur_angle = old_angle
+            env.cur_pos = old_pos
 
         if params.find_road:
             # find a starting position
