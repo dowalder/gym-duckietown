@@ -14,6 +14,7 @@ import cv2
 import torch
 import numpy as np
 
+import src.actionfinders
 from gym_duckietown.envs import GeneratorEnv, set_only_road, unset_only_road
 
 import src.actionfinder
@@ -63,7 +64,7 @@ def main():
         params_copy.additional["action_resolution"] = 50
         action_finder_fast = src.actionfinder.BestDiscrete(params_copy)
 
-    controller = src.options.choose_actionfinder(params.actionfinder, params)
+    controller = src.actionfinders.choose_actionfinder(params.actionfinder, params)
 
     keep_position_after_reset = params.get("keep_position_after_reset", no_raise=False)
 

@@ -13,7 +13,18 @@ from typing import Optional, Dict, Any
 import numpy as np
 
 import src.controllers
+import src.options
 import src.params
+
+
+def choose_actionfinder(actionfinder: str, *args, **kwargs):
+    options = {
+        "BestDiscrete": src.actionfinder.BestDiscrete,
+        "CNNOmega": src.actionfinder.CNNOmega,
+        "Random": src.actionfinder.RandomWalker,
+        "CNNDiscrete": src.actionfinder.CNNDiscrete
+    }
+    return src.options.choose(actionfinder, options, "Actionfinders", *args, **kwargs)
 
 
 class Result:

@@ -1,16 +1,46 @@
 #!/usr/bin/env python3
 import itertools
 import pathlib
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Any
 
 import torch
+import torch.nn
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim
 import torchvision.models.resnet
 
+import src.losses
 import src.resnet
 import src.params
 import src.options
+
+
+def choose_network(network: str, *args, **kwargs):
+    options = {
+        "BasicLaneFollower": src.networks.BasicLaneFollower,
+        "ActionEstimator": src.networks.ActionEstimator,
+        "IntentionTranslator": src.networks.IntentionTranslator,
+        "ITSharedWeights": src.networks.ITSharedWeights,
+    }
+    return src.options.choose(network, options, "Networks", *args, **kwargs)
+
+
+def choose_optimizer(optim: str, *args, **kwargs) -> Any:
+    options = {
+        "Adam": torch.optim.Adam,
+    }
+    return src.options.choose(optim, options, "Optimizers", *args, **kwargs)
+
+
+def choose_criterion(criterion: str, *args, **kwargs) -> Any:
+    options = {
+        "MSE": torch.nn.MSELoss,
+        "CrossEntropy": torch.nn.CrossEntropyLoss,
+        "LabelsToCrossEntropy": src.losses.LabelsToCrossEntropy,
+        "DistributionLoss": src.losses.MySpecialMSELoss,
+    }
+    return src.options.choose(criterion, options, "Criterions", *args, **kwargs)
 
 
 class BaseModel(nn.Module):
@@ -50,10 +80,10 @@ class BaseModel(nn.Module):
         return loss.item()
 
     def init_training(self):
-        self.optim = src.options.choose_optimizer(
+        self.optim = choose_optimizer(
             self.params.optimizer, self.parameters(), **self.params.optimizer_params)
 
-        self.criterion = src.options.choose_criterion(self.params.criterion, **self.params.criterion_params)
+        self.criterion = choose_criterion(self.params.criterion, **self.params.criterion_params)
         self.apply(weights_init)
         (self.params.model_path / "conf.yaml").write_text(self.params.conf_file_text())
         self.training_mode = True
@@ -207,6 +237,7 @@ class BasicLaneFollower(BaseModel):
                                norm_layer=None)
         self.fc1 = nn.Linear(10 * 5 * 64, 1024)
         self.fc2 = nn.Linear(1024, 1)
+        self.to(self.params.device)
 
     def forward(self, x_in):
         x = self.conv(x_in)

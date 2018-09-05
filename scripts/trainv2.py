@@ -7,13 +7,14 @@ import pathlib
 import torch
 import torch.utils.data
 
+import src.datasetv2
 import src.params
 import src.networks
 import src.options
 
 
 def load_dataloader(dataset_path: pathlib.Path, params: src.params.TrainParams):
-    dataset = src.options.choose_dataset(params.data_set, dataset_path, params)
+    dataset = src.datasetv2.choose_dataset(params.data_set, dataset_path, params)
     collate_fn = dataset.collate_fn()
     if collate_fn is None:
         return torch.utils.data.DataLoader(dataset, batch_size=params.batch_size, shuffle=True)
@@ -63,7 +64,7 @@ def main():
     args = parser.parse_args()
     params = src.params.TrainParams(args.conf, args.name)
 
-    net = src.options.choose_network(params.network, params)
+    net = src.networks.choose_network(params.network, params)
     net.init_training()
     net.say(50 * "=")
     net.say("Starting training named {}".format(args.name))

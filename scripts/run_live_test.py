@@ -62,11 +62,12 @@ def main():
     parser.add_argument("--num_img", default=200, type=int)
     parser.add_argument("--augment_action", default="1,1", type=str)
     parser.add_argument("--only_road", action="store_true")
+    parser.add_argument("--vis", action="store_true")
 
     args = parser.parse_args()
     params = src.params.TestParams(args.conf, args.name)
 
-    controller = src.options.choose_controller(params.get("controller", no_raise=False), params)
+    controller = src.controllers.choose_controller(params.get("controller", no_raise=False), params)
 
     if args.only_road:
         set_only_road()
@@ -106,6 +107,8 @@ def main():
                          "action": action.tolist(),
                          "reward": float(reward),
                          "delta_t": delta_t})
+            if args.vis:
+                env.render()
 
         info_path = seq_dir.parent / (seq_dir.stem + ".yaml")
         info_path.write_text(yaml.dump(info))

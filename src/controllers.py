@@ -12,6 +12,15 @@ import numpy as np
 import src.networks
 import src.params
 import src.graphics
+import src.options
+
+
+def choose_controller(controller: str, *args, **kwargs):
+    options = {
+        "Omega": OmegaController,
+        "DiscreteAction": DiscreteAction,
+    }
+    return src.options.choose(controller, options, "Controllers", *args, **kwargs)
 
 
 def omega_to_wheels(omega, v, wheel_dist=0.1) -> List[float]:
@@ -46,13 +55,22 @@ class OmegaController(Controller):
         self.wheel_dist = 0.1
         self.speed_factor = 1.0
 
-        self._transform = torchvision.transforms.Compose([
-            torchvision.transforms.ToPILImage(),
+        trans = [torchvision.transforms.ToPILImage()]
+        if params.get("color", default="gray") == "gray":
+            trans.append(torchvision.transforms.Grayscale())
+
+        trans += [
             torchvision.transforms.Resize((80, 160)),
-            torchvision.transforms.Grayscale(),
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Lambda(lambda img: img.unsqueeze(0))
-        ])
+            torchvision.transforms.ToTensor()
+        ]
+        if params.get("normalize", default=False):
+            trans.append(torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
+
+        trans += [
+            torchvision.transforms.Lambda(lambda img: img.unsqueeze(0).to(params.device))
+        ]
+
+        self._transform = torchvision.transforms.Compose(trans)
 
     def step(self, img: np.ndarray) -> np.ndarray:
         angle = float(self.cnn(self._transform(img)))

@@ -15,6 +15,36 @@ import cv2
 
 import src.params
 import src.graphics
+from src.options import choose
+
+
+def choose_dataset(data_set: str, *args, **kwargs):
+    options = {
+        "SingleImage": SingleImage,
+        "Sequence": Sequence
+    }
+    return choose(data_set, options, "DataSets", *args, **kwargs)
+
+
+def get_transform(params: src.params.Params):
+
+    crop = params.get("crop", default=False)
+    normalize = params.get("normalize", default=False)
+    color = params.get("color", no_raise=True)
+    size = params.get("image_size", no_raise=True)
+    size = src.graphics.size_from_string(size) if size is not None else (120, 160)
+
+    transf = [transforms.Grayscale()] if color == "gray" else []
+    if crop:
+        transf.append(CropTransform(size))
+    else:
+        transf.append(transforms.Resize(size))
+
+    transf.append(transforms.ToTensor())
+    if normalize:
+        transf.append(transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
+
+    return transf
 
 
 class Base(torch.utils.data.Dataset):
@@ -53,6 +83,18 @@ class Base(torch.utils.data.Dataset):
         return None
 
 
+class CropTransform:
+
+    def __init__(self, size: Tuple[int, int]):
+        self.size = size
+
+    def __call__(self, img):
+        width, height = img.size
+        idx_from_top = height - self.size[0]
+        idx_from_left = (width - self.size[1]) // 2
+        return transforms.functional.crop(img, idx_from_top, idx_from_left, *self.size)
+
+
 class SingleImage(Base):
 
     def _init_data(self):
@@ -65,18 +107,7 @@ class SingleImage(Base):
                 raise IOError("Could not find the label file {}".format(lbl_file))
             self.labels.append(list(map(float, lbl_file.read_text().strip().split())))
 
-        normalize = self.params.get("normalize", default=False)
-        color = self.params.get("color", no_raise=True)
-        size = self.params.get("image_size", no_raise=True)
-        size = src.graphics.size_from_string(size) if size is not None else (120, 160)
-
-        transf = [transforms.Grayscale()] if color == "gray" else []
-        transf.append(transforms.Resize(size))
-        transf.append(transforms.ToTensor())
-        if normalize:
-            transf.append(transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
-
-        self.transform = transforms.Compose(transf)
+        self.transform = transforms.Compose(get_transform(self.params))
 
     def _load_item(self, item):
         img = PIL.Image.open(self.images[item].as_posix())

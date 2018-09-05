@@ -1,3 +1,5 @@
+import re
+
 import torch
 
 
@@ -39,6 +41,14 @@ class TransformerNet(torch.nn.Module):
         y = self.relu(self.in5(self.deconv2(y)))
         y = self.deconv3(y)
         return y
+
+    def load(self, path: str):
+        state_dict = torch.load(path)
+        # remove saved deprecated running_* keys in InstanceNorm from the checkpoint
+        for k in list(state_dict.keys()):
+            if re.search(r'in\d+\.running_(mean|var)$', k):
+                del state_dict[k]
+        self.load_state_dict(state_dict)
 
 
 class ConvLayer(torch.nn.Module):
