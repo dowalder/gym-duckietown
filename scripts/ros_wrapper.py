@@ -67,6 +67,7 @@ def main():
 
     parser.add_argument("--mode", choices=["img_to_cmd", "img_to_img", "neural_img_to_cmd"], required=True)
     parser.add_argument("--rectify", action="store_true")
+    parser.add_argument("--use_pix2pix", action="store_true")
 
     args = parser.parse_args()
 
@@ -92,21 +93,35 @@ def main():
     net = src.networks.BasicLaneFollower(params)
     net.load()
 
-    transform_net = src.neural_style_transformer.TransformerNet()
+    if args.use_pix2pix:
+        import importlib
+        pix2pix_networks = importlib.import_module("networks", "/home/dominik/workspace/pix2pix/models")
+        transform_net = pix2pix_networks.unet(3, 3, 8)
+        transform_net.cuda()
+        net.load_state_dict(torch.load("/home/dominik/dataspace/models/pix2pix/randbackgradscale/latest_net_G.pth",
+                                       map_location="cuda:0"))
 
-    transform_net.load("/home/dominik/dataspace/models/neural_style/4_styles_in_batch/epoch_2_Fri_Aug_31_05:19:12_2018_100000.0_10000000000.0.model")
-    transform_net.to("cuda:0")
+        transform_transform = torchvision.transforms.Compose([
+            torchvision.transforms.Resize((256, 256)),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+    else:
+        transform_net = src.neural_style_transformer.TransformerNet()
 
-    transform_transform = torchvision.transforms.Compose([
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Lambda(lambda x: x.mul(255).unsqueeze(0).to(params.device))
-    ])
+        transform_net.load("/home/dominik/dataspace/models/neural_style/4_sib_on_duckie_imgs/epoch_20_Thu_Sep_20_12:58:24_2018_100000.0_10000000000.0.model")
+        transform_net.to("cuda:0")
+
+        transform_transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda x: x.mul(255).unsqueeze(0).to(params.device))
+        ])
 
     transform = torchvision.transforms.Compose([
         torchvision.transforms.Resize((120, 160)),
         # torchvision.transforms.Grayscale(),
         torchvision.transforms.ToTensor(),
-        torchvision.transforms.Lambda(lambda x: x[:, 40:, :]),
+        # torchvision.transforms.Lambda(lambda x: x[:, 40:, :]),
         torchvision.transforms.Lambda(lambda x: x.unsqueeze(0).to(params.device))
     ])
 
@@ -122,11 +137,13 @@ def main():
             img = PIL.Image.open(io.BytesIO(message))
 
             idx += 1
-            img.save((path / "{}_original.jpg".format(idx)).as_posix())
+            # img.save((path / "{}_original.jpg".format(idx)).as_posix())
 
             if args.mode in ["neural_img_to_cmd", "img_to_img"]:
                 img = transform_transform(img)
                 img = transform_net(img)
+                if args.use_pix2pix:
+                    img = (img + 1) / 2.0 * 255.0
                 img = img.clamp(0, 255).cpu().squeeze(0).numpy()
                 img = img.transpose(1, 2, 0).astype("uint8")
                 img = PIL.Image.fromarray(img)
@@ -143,7 +160,7 @@ def main():
             if args.mode == "img_to_img":
                 jpg_bytes = io.BytesIO()
                 img.save(jpg_bytes, format="JPEG")
-                img.save((path / "{}_augmented.jpg".format(idx)))
+                # img.save((path / "{}_augmented.jpg".format(idx)))
 
                 img_pub.send(jpg_bytes.getvalue())
 

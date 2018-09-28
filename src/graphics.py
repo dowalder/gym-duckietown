@@ -84,3 +84,12 @@ def gradient_lighting(img: np.ndarray) -> np.ndarray:
     return img * grad
 
 
+def overflow(img: np.ndarray) -> np.ndarray:
+    assert img.dtype == np.uint8
+    return img + 127
+
+
+def invert(img: np.ndarray) -> np.ndarray:
+    assert img.dtype == np.uint8
+    return 255 - img
+

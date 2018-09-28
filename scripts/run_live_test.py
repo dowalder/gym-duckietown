@@ -63,13 +63,14 @@ def main():
     parser.add_argument("--augment_action", default="1,1", type=str)
     parser.add_argument("--only_road", action="store_true")
     parser.add_argument("--vis", action="store_true")
+    parser.add_argument("--only_marks", action="store_true")
 
     args = parser.parse_args()
     params = src.params.TestParams(args.conf, args.name)
 
     controller = src.controllers.choose_controller(params.get("controller", no_raise=False), params)
 
-    if args.only_road:
+    if args.only_road or args.only_marks:
         set_only_road()
     env = GeneratorEnv(map_name=args.map)
 
@@ -86,6 +87,9 @@ def main():
         seq_dir = params.result_path / "seq_{0:05d}".format(num_seq)
         seq_dir.mkdir(exist_ok=True)
         obs = env.reset(perturb_factor=0.0)
+        if args.only_marks:
+            obs = src.graphics.apply_color_filter(obs)
+
         img_path = seq_dir / "img_00000.jpg"
 
         delta_t = 0.1
@@ -99,7 +103,7 @@ def main():
 
             action = controller.step(obs) * action_mult
             obs, reward, _, _ = env.step(action, delta_t, only_road=args.only_road)
-            if args.only_road:
+            if args.only_marks:
                 obs = src.graphics.apply_color_filter(obs)
             save_img(img_path, obs)
 

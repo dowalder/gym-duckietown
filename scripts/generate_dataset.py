@@ -5,6 +5,7 @@ import random
 import argparse
 import json
 import shutil
+from typing import List, Callable
 
 import yaml
 import numpy as np
@@ -12,6 +13,23 @@ import cv2
 
 from gym_duckietown.envs import SimpleSimEnv
 import src.graphics
+
+
+class Transform:
+
+    def __init__(self):
+        self.transforms = []
+
+    def add_transform(self, transform: Callable):
+        self.transforms.append(transform)
+
+    def __call__(self, img):
+        for t in self.transforms:
+            img = t(img)
+        return img
+
+    def __bool__(self):
+        return bool(self.transforms)
 
 
 def write_imgs_from_map(map_name: str, save_dir: pathlib.Path, test_percentage=0.3):
@@ -91,12 +109,12 @@ def write_imgs_from_srcdir(src_dir: pathlib.Path, tgt_dir: pathlib.Path, keep_ze
             lbl_tgt.write_text(str(entry["omega"]))
 
 
-def transform_images(src_dir: pathlib.Path):
+def transform_images(src_dir: pathlib.Path, transform: Callable):
     for pth in src_dir.iterdir():
         if pth.suffix != ".jpg":
             continue
         img = cv2.imread(pth.as_posix())
-        img = src.graphics.apply_color_filter(img)
+        img = transform(img)
         cv2.imwrite(pth.as_posix(), img)
 
 
@@ -109,6 +127,8 @@ def main():
     parser.add_argument("--flatten_dist", action="store_true", help="if the data distribution should be flattened")
     parser.add_argument("--only_road", action="store_true", help="use the only road images")
     parser.add_argument("--transform_only_road", action="store_true", help="transforms the only road images")
+    parser.add_argument("--invert", action="store_true")
+    parser.add_argument("--overflow", action="store_true")
 
     args = parser.parse_args()
 
@@ -136,10 +156,18 @@ def main():
                                keep_zeros_prob=keep_zeros_prob,
                                only_road=args.only_road)
 
-    if args.transform_only_road:
+    transform = Transform()
+    if args.tranform_only_road:
+        transform.add_transform(src.graphics.apply_color_filter)
+    if args.invert:
+        transform.add_transform(src.graphics.invert)
+    if args.overflow:
+        transform.add_transform(src.graphics.overflow)
+
+    if transform:
         print("transforming images...")
-        transform_images(pathlib.Path(args.tgt_dir) / "train")
-        transform_images(pathlib.Path(args.tgt_dir) / "test")
+        transform_images(pathlib.Path(args.tgt_dir) / "train", transform)
+        transform_images(pathlib.Path(args.tgt_dir) / "test", transform)
 
 
 if __name__ == "__main__":
