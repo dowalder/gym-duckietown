@@ -44,7 +44,9 @@ def create_images(road_dirs: List[pathlib.Path],
     a_train.mkdir(exist_ok=True)
     b_train.mkdir(exist_ok=True)
 
+    print("loading road images...")
     road_imgs = load_only_road_imgs(road_dirs)
+    print("loading background images...")
     background_imgs = []
     for background_dir in background_dirs:
         background_imgs += [background_dir / img for img in background_dir.glob("*.jpg")]
@@ -90,6 +92,18 @@ def create_images(road_dirs: List[pathlib.Path],
         background_box += road
         road_filtered_extended[height_mod:, width_start:width_end, :] = road_filtered
 
+        # add gradient
+        background = src.graphics.gradient_lighting(background)
+        # add spots
+        for _ in range(4):
+            if np.random.random() < 0.2:
+                background = src.graphics.spot(background)
+        # add noise
+        background = background.astype(np.float)
+        background += np.random.randint(-20, 20, background.shape)
+        background *= (np.random.random((1, 1, 3)) * 1.7 + 0.1)
+        background = np.clip(background, 0, 255).astype(np.uint8)
+
         if random.random() < test_percentage:
             a_path = a_test / "{0:05d}.jpg".format(idx)
             b_path = b_test / "{0:05d}.jpg".format(idx)
@@ -99,6 +113,9 @@ def create_images(road_dirs: List[pathlib.Path],
 
         cv2.imwrite(a_path.as_posix(), background)
         cv2.imwrite(b_path.as_posix(), road_filtered_extended)
+
+        if idx % 500 == 0:
+            print("processed images: {}/{}".format(idx, num_imgs))
 
 
 def main():
@@ -117,7 +134,7 @@ def main():
     tgt_dir = pathlib.Path(args.tgt_dir)
     tgt_dir.mkdir(exist_ok=True, parents=True)
 
-    create_images(road_dirs, background_dirs, tgt_dir, num_imgs=args.num_imgs)
+    create_images(road_dirs, background_dirs, tgt_dir, num_imgs=args.num_imgs, test_percentage=0.05)
 
 
 if __name__ == "__main__":

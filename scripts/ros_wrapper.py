@@ -5,7 +5,6 @@ import argparse
 import io
 import pathlib
 
-
 import zmq
 import PIL.Image
 import yaml
@@ -34,6 +33,8 @@ def _init_intrinsics():
         'P': np.array(calibration['projection_matrix']['data']).reshape((3, 4)),
         'distortion_model': calibration['distortion_model'],
     }
+
+
 # intrinsics = {
 #     "K": np.array([307.7379294605756, 0, 329.692367951685, 0, 314.9827773443905, 244.4605588877848, 0, 0, 1
 #                    ]).reshape(3, 3),
@@ -65,9 +66,10 @@ def rectify(image):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--mode", choices=["img_to_cmd", "img_to_img", "neural_img_to_cmd"], required=True)
+    parser.add_argument("--mode", choices=["img_to_cmd", "img_to_img", "neural_img_to_cmd", "delay"], required=True)
     parser.add_argument("--rectify", action="store_true")
     parser.add_argument("--use_pix2pix", action="store_true")
+    parser.add_argument("--delay_ms", default=20)
 
     args = parser.parse_args()
 
@@ -89,27 +91,36 @@ def main():
 
     print("Loading network...")
     params = src.params.TestParams("conf_files/basic_lanefollower.yaml",
-                                   "base_lanefollower_color_80_160_crop")
+                                   "domain_rand_onlymarks_80_160_color")
     net = src.networks.BasicLaneFollower(params)
     net.load()
 
     if args.use_pix2pix:
-        import importlib
-        pix2pix_networks = importlib.import_module("networks", "/home/dominik/workspace/pix2pix/models")
-        transform_net = pix2pix_networks.unet(3, 3, 8)
+        import sys
+        sys.path.insert(0, '/home/dominik/workspace/pix2pix')
+
+        import models.networks as pix2pix_networks
+        transform_net = pix2pix_networks.UnetGenerator(3, 3, 8)
         transform_net.cuda()
-        net.load_state_dict(torch.load("/home/dominik/dataspace/models/pix2pix/randbackgradscale/latest_net_G.pth",
-                                       map_location="cuda:0"))
+        state_dict = torch.load("/home/dominik/dataspace/models/pix2pix/randbackgradscale_aug/latest_net_G.pth", #"/home/dominik/dataspace/models/pix2pix/randbackgradscale/latest_net_G.pth",
+                                map_location="cuda:0")
+        for k in list(state_dict.keys()):
+            if "num_batches_tracked" in k:
+                del state_dict[k]
+        transform_net.load_state_dict(state_dict)
+
 
         transform_transform = torchvision.transforms.Compose([
             torchvision.transforms.Resize((256, 256)),
             torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+            torchvision.transforms.Lambda(lambda x: x.unsqueeze(0).cuda())
         ])
     else:
         transform_net = src.neural_style_transformer.TransformerNet()
 
-        transform_net.load("/home/dominik/dataspace/models/neural_style/4_sib_on_duckie_imgs/epoch_20_Thu_Sep_20_12:58:24_2018_100000.0_10000000000.0.model")
+        transform_net.load(
+            "/home/dominik/dataspace/models/neural_style/style3/epoch_2_Wed_Aug_22_22:38:39_2018_100000.0_10000000000.0.model")
         transform_net.to("cuda:0")
 
         transform_transform = torchvision.transforms.Compose([
@@ -121,7 +132,7 @@ def main():
         torchvision.transforms.Resize((120, 160)),
         # torchvision.transforms.Grayscale(),
         torchvision.transforms.ToTensor(),
-        # torchvision.transforms.Lambda(lambda x: x[:, 40:, :]),
+        torchvision.transforms.Lambda(lambda x: x[:, 40:, :]),
         torchvision.transforms.Lambda(lambda x: x.unsqueeze(0).to(params.device))
     ])
 
@@ -132,6 +143,9 @@ def main():
     while True:
         message = image_sub.recv()
         print("Received message")
+        if args.mode == "delay":
+            time.sleep(args.delay_ms / 1e3)
+            img_pub.send(message)
         with torch.no_grad():
             t = time.time()
             img = PIL.Image.open(io.BytesIO(message))
