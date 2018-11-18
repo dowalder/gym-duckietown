@@ -1,0 +1,41 @@
+# data_path is expected to have a train and a test folder containing the respective datasets
+data_path: "/home/dominik/dataspace/images/images_mixed_train_test"
+
+# a folder with the name of the network (given the training script as an argument) will be created to save weights
+model_path: "/home/dominik/dataspace/models/mxm_sim"
+
+result_path: "none"
+
+# an iteration is a pass over a single batch
+test_interval: 50
+train_interval: 10
+save_interval: 1000
+num_epochs: 100
+
+# torch device (cpu, cuda:0, cuda:1, ...)
+device: "cuda:0"
+network: "BasicLaneFollower"
+
+# confinues from the last model saved
+continue: false
+
+# with dataset to use. refer to train.py for options
+data_set: "SingleImage"
+batch_size: 200
+# if true, all data is loaded to memory before training. speeds up training a lot, but can be too much for certain
+# data set/RAM combinations
+data_in_memory: false
+
+# optimizer to use. you can specify parameters as a params dict
+optimizer:
+  name: Adam
+
+# criterion to use. you can specify parameters as a params dict
+criterion:
+  name: MSE
+
+# additional information. depends on network and data set.
+additional:
+  image_size: "80,160"
+  color: "gray"
+  normalize: true

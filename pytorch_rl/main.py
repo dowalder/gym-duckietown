@@ -127,7 +127,7 @@ def main():
             cpu_actions = action.data.squeeze(1).cpu().numpy()
 
             # Observation, reward and next obs
-            obs, reward, done, info = envs.step(cpu_actions)
+            obs, reward, done, info = envs.find_action(cpu_actions)
 
             # Maxime: clip the reward within [0,1] for more reliable training
             # This code deals poorly with large reward values

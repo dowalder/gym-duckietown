@@ -2,5 +2,10 @@
 *.pyc
 *.egg-info
 .idea/
+venv3/
+venv_gym/
+experiments/demos_zigzag_dists.json
+experiments/demos_loop_obstacles.json
+trained_models/*
 
 xvfb.log

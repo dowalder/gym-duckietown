@@ -8,7 +8,7 @@ Please use this bibtex if you want to cite this repository in your publications:
 
 ```
 @misc{gym_duckietown,
-  author = {Maxime Chevalier-Boisvert, Florian Golemo, Yanjun Cao, Liam Paull},
+  author = {Maxime Chevalier-Boisvert, Florian Golemo, Yanjun Cao, Bhairav Mehta, Liam Paull},
   title = {Duckietown Environments for OpenAI Gym},
   year = {2018},
   publisher = {GitHub},
@@ -108,17 +108,23 @@ Note that in order to get GPU acceleration, you should install and use [nvidia-d
 
 ## Usage
 
-To run the standalone UI application, which allows you to control the simulation or real robot manually:
+### Testing
+
+There is a simple UI application which allows you to control the simulation or real robot manually:
 
 ```
-./standalone.py --env-name SimpleSim-v0
+./manual_control.py --env-name SimpleSim-v0
 ```
 
-The `standalone.py` application will launch the Gym environment, display camera images and send actions (keyboard commands) back to the simulator or robot. You can specify which map file to load with the `--map-name` argument:
+The `manual_control.py` application will launch the Gym environment, display camera images and send actions (keyboard commands) back to the simulator or robot. You can specify which map file to load with the `--map-name` argument:
 
 ```
-./standalone.py --env-name SimpleSim-v0 --map-name small_loop
+./manual_control.py --env-name SimpleSim-v0 --map-name small_loop
 ```
+
+There is also a script to run automated tests (`run_tests.py`) and a script to gather performance metrics (`benchmark.py`).
+
+### Reinforcement Learning
 
 To train a reinforcement learning agent, you can use the code provided under [/pytorch_rl](/pytorch_rl). I recommend using the A2C or ACKTR algorithms. A sample command to launch training is:
 
@@ -131,6 +137,28 @@ Then, to visualize the results of training, you can run the following command. N
 ```
 python3 pytorch_rl/enjoy.py --env-name Duckie-SimpleSim-Discrete-v0 --num-stack 1 --load-dir trained_models/a2c
 ```
+
+### Imitation Learning
+
+There is a script in the `experiments` directory which automatically generates a dataset of synthetic demonstrations. It uses hillclimbing to optimize the reward obtained, and outputs a JSON file:
+
+```
+experiments/gen_demos.py --map-name loop_obstacles
+```
+
+Then you can start training an imitation learning model (conv net) with:
+
+```
+experiments/train_imitation.py --map-name loop_obstacles
+```
+
+Finally, you can visualize what the trained model is doing with:
+
+```
+experiments/control_imitation.py --map-name loop_obstacles
+```
+
+Note that it is possible to have `gen_demos.py` and `train_imitate.py` running simultaneously, so that training takes place while new demonstrations are being generated. You can also run `control_imitate.py` periodically during training to check on learning progress.
 
 ## Design
 
@@ -154,6 +182,7 @@ The available object types are:
 - barrier
 - cone (traffic cone)
 - duckie
+- duckiebot (model of a Duckietown robot)
 - tree
 - house
 - truck (delivery-style truck)
@@ -235,6 +264,13 @@ We recommend using the Ubuntu-based [Deep Learning AMI](https://aws.amazon.com/m
 ```
 # Install xvfb
 sudo apt-get install xvfb mesa-utils -y
+
+# Remove the nvidia display drivers (this doesn't remove the CUDA drivers)
+# This is necessary as nvidia display doesn't play well with xvfb
+sudo nvidia-uninstall -y
+
+# Sanity check to make sure you still have CUDA driver and its version
+nvcc --version
 
 # Start xvfb
 Xvfb :1 -screen 0 1024x768x24 -ac +extension GLX +render -noreset &> xvfb.log &

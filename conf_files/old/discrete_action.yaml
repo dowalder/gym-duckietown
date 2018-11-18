@@ -1,0 +1,16 @@
+test_path: "/home/dominik/dataspace/images/mxm_sim/udem1/discrete_action_train/test"
+train_path: "/home/dominik/dataspace/images/mxm_sim/udem1/discrete_action_train/train"
+
+pretrained_path: "/home/dominik/dataspace/models/mxm_sim/caffe_copy_working.pth"
+
+model_path: "/home/dominik/dataspace/models/mxm_sim/only_road"
+device: "cuda:0"
+use_resnet: true
+intervals:
+  display: 100
+  test: 1000
+  save: 5000
+num_epochs: 2000
+network: "cnn"
+pretrained: true
+data_in_memory: false

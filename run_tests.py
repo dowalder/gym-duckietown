@@ -17,7 +17,9 @@ m1 = first_render.mean()
 assert m0 > 0 and m0 < 255
 assert abs(m0 - m1) < 5
 
-obs, _, _, _ = env.step(np.array([0.1, 0.1]))
+# Try stepping a few times
+for i in range(0, 10):
+    obs, _, _, _ = env.step(np.array([0.1, 0.099]))
 
 # Try loading each of the available map files
 for map_file in os.listdir('gym_duckietown/maps'):
@@ -26,3 +28,11 @@ for map_file in os.listdir('gym_duckietown/maps'):
 
 # Test the multi-map environment
 env = MultiMapEnv()
+
+# Check that we do not spawn too close to obstacles
+env = SimpleSimEnv(map_name='loop_obstacles')
+for i in range(0, 75):
+    obs = env.reset()
+    assert not env._collision(), "collision on spawn"
+    env.step(np.array([0.1, 0.1]))
+    assert not env._collision(), "collision after one step"

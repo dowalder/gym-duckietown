@@ -10,15 +10,16 @@ import time
 import random
 import argparse
 import math
+import json
 import gym_duckietown
 from gym_duckietown.envs import SimpleSimEnv
 import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--map-name', default='straight_road')
-parser.add_argument('--demo_len', default=50, help='length of demonstrations to be generated')
-parser.add_argument('--tail_len', default=10, help='extra actions at the end of trajectories, cut out of demonstrations')
-parser.add_argument('--num_itrs', default=750)
+parser.add_argument('--demo-len', default=30, type=int, help='length of demonstrations to be generated')
+parser.add_argument('--tail-len', default=30, type=int, help='extra actions at the end of trajectories, cut out of demonstrations')
+parser.add_argument('--num-itrs', default=750, type=int)
 args = parser.parse_args()
 
 def gen_actions(seq_len):
@@ -61,7 +62,7 @@ def eval_actions(env, seed, actions):
         positions.append((env.cur_pos, env.cur_angle))
 
         env.graphics = False
-        obs, reward, done, info = env.step(vels)
+        obs, reward, done, info = env.find_action(vels)
         env.graphics = True
 
         total_reward += reward
@@ -77,60 +78,80 @@ def gen_trajectory(env, seed, num_actions, num_itrs):
     total reward obtained
     """
 
-    best_actions = gen_actions(num_actions)
     best_r = -math.inf
+    best_len = 0
+    best_actions = None
+    best_positions = None
 
+    # Do an initial search to try to find a trajectory
+    # along which the agent doesn't fail
+    for i in range(0, 150):
+        new_actions = gen_actions(num_actions)
+        positions, r = eval_actions(env, seed, new_actions)
+        t_len = len(positions)
+
+        if t_len > best_len or (t_len == best_len and r > best_r):
+            best_r = r
+            best_len = t_len
+            best_actions = new_actions
+            best_positions = positions
+
+    # If we couldn't find a working trajectory from this seed, abort
+    if best_len < num_actions:
+        print('abort')
+        return best_positions, best_actions
+
+    # Iteratively mutate and improve the trajectory
     for itr in range(1, num_itrs+1):
-
         new_actions = mutate_actions(best_actions)
         positions, r = eval_actions(env, seed, new_actions)
 
         if r > best_r:
             best_r = r
             best_actions = new_actions
+            best_positions = positions
             print('iteration #%d, r=%f' % (itr, r))
 
     print('r=%f' % best_r)
 
-    return positions, best_actions
+    return best_positions, best_actions
 
 env = SimpleSimEnv(map_name=args.map_name)
 
 demos = []
 total_steps = 0
 
-while True:
+for _ in range(1000):
     seed = random.randint(0, 0xFFFFFFFF)
     p, a = gen_trajectory(env, seed, args.demo_len + args.tail_len, args.num_itrs)
 
-    # If the agent fell off the road, ignore this trajectory
-    if len(p) < args.demo_len + args.tail_len:
-        continue
+    print('trajectory length: %d' % len(p))
 
-    # Drop the last few actions, because the agent behaves more
-    # greedily in the last steps (doesn't maximize future reward)
-    p = p[:-args.tail_len]
-    a = a[:-args.tail_len]
+    # If the agent did not fall off the road
+    if len(p) == args.demo_len + args.tail_len:
+        # Drop the last few actions, because the agent behaves more
+        # greedily in the last steps (doesn't maximize future reward)
+        p = p[:-args.tail_len]
+        a = a[:-args.tail_len]
 
-    # Convert numpy array to plain Python lists so we can store
-    # the data in a JSON file
-    #
-    # Each position has the form [ [x,y,z], angle ]
-    # Each action has the form [v0,v1]
-    p = list(map(lambda p: [ p[0].tolist(), p[1] ], p))
-    a = list(map(lambda a: a.tolist(), a))
+        # Convert numpy array to plain Python lists so we can store
+        # the data in a JSON file
+        #
+        # Each position has the form [ [x,y,z], angle ]
+        # Each action has the form [v0,v1]
+        p = list(map(lambda p: [ p[0].tolist(), p[1] ], p))
+        a = list(map(lambda a: a.tolist(), a))
 
-    demo = {
-        'positions': p,
-        'actions': a
-    }
+        demo = {
+            'positions': p,
+            'actions': a
+        }
 
-    demos.append(demo)
-    total_steps += len(p)
+        demos.append(demo)
+        total_steps += len(p)
+
+        # Store the trajectories in a JSON file
+        with open('experiments/demos_%s.json' % args.map_name, 'w') as outfile:
+            json.dump({ 'demos': demos }, outfile)
 
     print('total num steps: %d' % total_steps)
-
-    # Store the trajectories in a JSON file
-    import json
-    with open('experiments/demos_%s.json' % args.map_name, 'w') as outfile:
-        json.dump({ 'demos': demos }, outfile)

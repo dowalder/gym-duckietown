@@ -13,7 +13,7 @@ class DummyVecEnv(VecEnv):
         self.actions = actions
 
     def step_wait(self):
-        results = [env.step(a) for (a,env) in zip(self.actions, self.envs)]
+        results = [env.find_action(a) for (a, env) in zip(self.actions, self.envs)]
         obs, rews, dones, infos = map(np.array, zip(*results))
         self.ts += 1
         for (i, done) in enumerate(dones):
