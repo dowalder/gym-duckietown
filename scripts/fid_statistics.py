@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Computes statistics from stored FID measurements.
+"""
+
 import pathlib
 import numpy as np
 
@@ -52,7 +56,6 @@ def main():
     make_fid_stats(fid_dir / "fid_style3.txt")
     make_fid_stats(fid_dir / "fid_pix2pix.txt")
     make_fid_stats(fid_dir / "fid_20_sib_cropped.txt")
-
 
 
 if __name__ == "__main__":

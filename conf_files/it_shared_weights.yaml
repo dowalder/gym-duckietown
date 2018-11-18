@@ -1,0 +1,47 @@
+# data_path is expected to have a train and a test folder containing the respective datasets
+data_path: "/home/dominik/dataspace/images/mxm_sim/udem1/with_modifier_discreteaction/intention_translator"
+
+# a folder with the name of the network (given the training script as an argument) will be created to save weights
+model_path: "/home/dominik/dataspace/models/mxm_sim"
+
+result_path: "/home/dominik/dataspace/images/cnn_controller_lane_following/test"
+
+# an iteration is a pass over a single batch
+test_interval: 200
+train_interval: 40
+save_interval: 5000
+num_epochs: 10
+
+# torch device (cpu, cuda:0, cuda:1, ...)
+device: "cuda:0"
+network: "ITSharedWeights"
+
+# confinues from the last model saved
+continue: false
+
+# with dataset to use. refer to train.py for options
+data_set: "Sequence"
+batch_size: 10
+# if true, all data is loaded to memory before training. speeds up training a lot, but can be too much for certain
+# data set/RAM combinations
+data_in_memory: false
+
+# optimizer to use. you can specify parameters as a params dict
+optimizer:
+  name: Adam
+
+# criterion to use. you can specify parameters as a params dict
+criterion:
+  name: MSE
+
+# additional information. depends on network and data set.
+additional:
+  image_size: "80,160"
+  num_actions: 11
+  action_min: -4.0
+  action_max: 4.0
+  controller: "DiscreteAction"
+  datapoints: ["softmax", "modifiers", "imgs", "actions"]
+  sequence_length: 10
+  actionestimator_name: "action_estimator"
+  actionestimator_conf_path: "conf_files/actionestimator.yaml"

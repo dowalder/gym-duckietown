@@ -1,3 +1,8 @@
+"""
+Resnet implementation, copied from torch resnet implementation and extended
+"""
+
+
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo

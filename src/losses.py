@@ -1,3 +1,7 @@
+"""
+Pytorch losses to be used to train networks.
+"""
+
 import torch.nn
 
 

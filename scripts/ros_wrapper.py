@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 
+
+"""
+This script performs image transformations or image-to-command computations. It listens for images over zeromq and
+publishes the result over a zeromq as well. The purpose of this node is to be able to use python3 with ros. You only
+need a ros node listening/publishing over zeromq as well.
+"""
+
 import time
 import argparse
 import io
@@ -33,18 +40,6 @@ def _init_intrinsics():
         'P': np.array(calibration['projection_matrix']['data']).reshape((3, 4)),
         'distortion_model': calibration['distortion_model'],
     }
-
-
-# intrinsics = {
-#     "K": np.array([307.7379294605756, 0, 329.692367951685, 0, 314.9827773443905, 244.4605588877848, 0, 0, 1
-#                    ]).reshape(3, 3),
-#     "D": np.array([-0.2565888993516047, 0.04481160508242147, -0.00505275149956019, 0.001308569367976665, 0
-#                    ]).reshape(1, 5),
-#     "R": np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0
-#                    ]).reshape(3, 3),
-#     "P": np.array([210.1107940673828, 0, 327.2577820024981, 0, 0, 253.8408660888672, 239.9969353923052, 0, 0, 0, 1, 0
-#                    ]).reshape(3, 4)
-# }
 
 
 def rectify(image):
@@ -102,7 +97,7 @@ def main():
         import models.networks as pix2pix_networks
         transform_net = pix2pix_networks.UnetGenerator(3, 3, 8)
         transform_net.cuda()
-        state_dict = torch.load("/home/dominik/dataspace/models/pix2pix/randbackgradscale_aug/latest_net_G.pth", #"/home/dominik/dataspace/models/pix2pix/randbackgradscale/latest_net_G.pth",
+        state_dict = torch.load("/home/dominik/dataspace/models/pix2pix/randbackgradscale_aug/latest_net_G.pth",
                                 map_location="cuda:0")
         for k in list(state_dict.keys()):
             if "num_batches_tracked" in k:
@@ -120,7 +115,7 @@ def main():
         transform_net = src.neural_style_transformer.TransformerNet()
 
         transform_net.load(
-            "/home/dominik/dataspace/models/neural_style/style3/epoch_2_Wed_Aug_22_22:38:39_2018_100000.0_10000000000.0.model")
+            "/home/dominik/dataspace/models/neural_style/20_sib_cropped/epoch_2_Mon_Sep_10_16:01:36_2018_100000.0_10000000000.0.model")
         transform_net.to("cuda:0")
 
         transform_transform = torchvision.transforms.Compose([

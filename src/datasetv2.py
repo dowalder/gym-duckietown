@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Implementation of different torch datasets
+"""
+
 import pathlib
 import PIL.Image
 import yaml
@@ -184,76 +188,3 @@ class Sequence(Base):
             datapoint["softmax"] = softmax
 
         return datapoint
-
-
-# class AurelDataSet(DataSet):
-#
-#     def __init__(self, data_csv: pathlib.Path):
-#         if not data_csv.is_file():
-#             ValueError("{} is not a valid file".format(data_csv))
-#
-#         self.images = []
-#         self.labels = []
-#         with data_csv.open() as fid:
-#             reader = csv.reader(fid)
-#             for row in reader:
-#                 try:
-#                     label = float(row[0])
-#                 except ValueError:
-#                     continue
-#                 self.labels.append([label])
-#                 self.images.append(row[1])
-#
-#         self.transform = transforms.Compose([
-#             transforms.Grayscale(),
-#             transforms.Resize((80, 160)),
-#             transforms.ToTensor(),
-#         ])
-#
-#
-# class NImagesDataSet(DataSet):
-#     """
-#     And extended data set, that returns n images concatenated as one instead of a single one.
-#     """
-#
-#     def __init__(self, data_dir, n=1):
-#         super(NImagesDataSet, self).__init__(data_dir)
-#
-#         self.n = n
-#         self.images.sort()
-#
-#         if len(self) < self.n:
-#             raise RuntimeError("Found {} images in {}, but require at least {}.".format(len(self), data_dir, self.n))
-#
-#         self.transform = transforms.Compose([
-#             transforms.ToPILImage(),
-#             transforms.Grayscale(),
-#             transforms.Resize((80 * self.n, 160)),
-#             transforms.ToTensor(),
-#         ])
-#
-#     def __len__(self):
-#         return len(self.images) - self.n
-#
-#     def __getitem__(self, item):
-#         imgs = [cv2.imread(path) for path in self.images[item:item + self.n]]
-#         img = np.concatenate(tuple(imgs))
-#         return torch.Tensor(self.labels[item + self.n]), self.transform(img)
-#
-#
-# class FutureLabelDataSet(NImagesDataSet):
-#
-#     def __len__(self):
-#         # for every entry, we need a future label, therefor we cannot return a value for the last image/label pair
-#         return len(self.images) - self.n - 1
-#
-#     def __getitem__(self, item):
-#         imgs = [cv2.imread(path) for path in self.images[item:item + self.n]]
-#         img = np.concatenate(tuple(imgs))
-#         return torch.Tensor(self.labels[item + self.n] + self.labels[item + self.n + 1]), self.transform(img)
-#
-#
-#
-#
-# if __name__ == "__main__":
-#     raise NotImplemented("This module cannot be run as an executable")

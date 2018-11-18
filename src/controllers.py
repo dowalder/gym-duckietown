@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Controllers compute actions only from images.
+"""
+
 import abc
 import collections
 import pathlib

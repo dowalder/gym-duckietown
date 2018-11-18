@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+"""
+Utility to load choose between different options.
+"""
+
 from typing import Dict, Callable, Any
 
 

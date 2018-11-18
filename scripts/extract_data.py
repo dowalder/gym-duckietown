@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Collects data of a random agent driving around in the duckietown simulation.
+"""
+
 import sys
 import pathlib
 

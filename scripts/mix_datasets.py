@@ -1,3 +1,8 @@
+"""
+Creates one dataset out of two, where the dataset is expected to consist of image1.jpg as images and image1.txt as
+corresponding labels.
+"""
+
 import pathlib
 import random
 

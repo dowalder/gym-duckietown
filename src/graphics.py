@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+"""
+Implements some graphical transforms for images.
+"""
+
 import random
 from typing import Tuple
 

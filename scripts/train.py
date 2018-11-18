@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+"""
+DEPRECATED: better use trainv2.py together with conf files. This file persists as not everything in it has been moved to
+trainv2.py, but in most cases the other one should be used.
+"""
+
 import argparse
 import os
 import pathlib

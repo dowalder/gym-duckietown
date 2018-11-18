@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+General training scripts. For a choice of datasets, networks, etc checkout out the source files in ./src
+"""
+
 import argparse
 import time
 import pathlib

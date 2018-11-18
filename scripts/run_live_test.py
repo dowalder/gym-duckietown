@@ -26,32 +26,6 @@ def save_img(path: pathlib.Path, img):
     cv2.imwrite(path.as_posix(), img)
 
 
-# def get_controller(args: Any) -> src.controllers.Controller:
-#     """
-#     Controller factory.
-#     :param args:
-#     :return:
-#     """
-#     controller_args = yaml.load(pathlib.Path(args.args).read_text())
-#     if args.controller == "omega":
-#         controller = src.controllers.OmegaController(pathlib.Path(controller_args["model_path"]))
-#     elif args.controller == "direct_action":
-#         controller = src.controllers.DirectAction(pathlib.Path(controller_args["model_path"]))
-#     elif args.controller == "resnet":
-#         controller = src.controllers.DirectActionResnet(pathlib.Path(controller_args["model_path"]))
-#     elif args.controller == "disturb":
-#         controller = src.controllers.FixDisturbController(pathlib.Path(controller_args["model_path"]),
-#                                                           pathlib.Path(
-#                                                               "/home/dominik/dataspace/models/rnn_randomwalk_forward/"
-#                                                               "run5_step_40000.pth"))
-#     elif args.controller == "intention":
-#         controller = src.controllers.DiscreteAction(11, (-4.0, 4.0), pathlib.Path(controller_args["model_path"]))
-#     else:
-#         raise ValueError("Unknown controller: {}".format(args.controller))
-#
-#     return controller
-
-
 def main():
     parser = argparse.ArgumentParser()
 

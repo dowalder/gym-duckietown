@@ -4,7 +4,6 @@
 .idea/
 venv3/
 venv_gym/
-conf_files/*
 experiments/demos_zigzag_dists.json
 experiments/demos_loop_obstacles.json
 trained_models/*

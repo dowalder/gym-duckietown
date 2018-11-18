@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Creates dataset such that the pix2pix framework can be trained with it.
+"""
+
 import random
 import argparse
 from pathlib import Path

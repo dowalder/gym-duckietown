@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+"""
+Implementation of different networks.
+"""
+
 import itertools
 import pathlib
 from typing import Optional, Union, Tuple, Any
@@ -691,28 +696,6 @@ class SequenceCnn(nn.Module):
             feature_vec[:, 250 * self.num_imgs + 2 * idx: 250 * self.num_imgs + 2 * (idx + 1)] = action
 
         return self._estimator(feature_vec)
-
-
-# class ActionEstimator(nn.Module):
-#
-#     def __init__(self):
-#         super(ActionEstimator, self).__init__()
-#
-#         self.cnn = SimpleCNN()
-#
-#         self.fc1 = nn.Linear(in_features=2048, out_features=512)
-#         self.fc2 = nn.Linear(in_features=512, out_features=128)
-#         self.fc3 = nn.Linear(in_features=128, out_features=2)
-#
-#     def forward(self, imgs):
-#         assert imgs.shape[0] == 2
-#
-#         x = self.cnn(imgs)
-#         x = torch.cat((x[0, :], x[1, :]))
-#         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-#         x = self.fc3(x)
-#         return x
 
 
 class DiscreteActionNet(nn.Module):

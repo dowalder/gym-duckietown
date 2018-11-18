@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 
+"""
+Draws different plots.
+"""
+
 import argparse
-import pathlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas
+
+plt.rcParams["font.family"] = "serif"
 
 
 def plot1(args):
@@ -82,40 +87,56 @@ def frame_statistics(frame: pandas.DataFrame) -> pandas.DataFrame:
 
 
 def plot2(args):
-    # def create_success_measure(frame: pandas.DataFrame) -> pandas.DataFrame:
     data = pandas.read_csv("/home/dominik/data/ETH/MasterThesis/data/runs.csv")
     data = frame_statistics(data)
 
-    only_s = data[data.run == "s"]
-    only_curvy = data[data.run == "curvy"]
-    only_straight = data[data.run == "straight"]
-
-    # f, axes = plt.subplots(2, 2, sharex=True, sharey=True, figsize=(7, 7))
-    # sns.distplot(only_s[only_s.success == 1].time, ax=axes[0], kde=False)
-    # sns.distplot(only_curvy[only_curvy.success == 1].time, ax=axes[1], kde=False)
-    # sns.distplot(only_straight[only_straight.success == 1].time, ax=axes[2], kde=False)
+    f, axes = plt.subplots(1, 4, sharex=True, sharey=True, figsize=(11, 3.5))
+    for ax in axes:
+        ax.grid(True)
+        ax.set_axisbelow(True)
+    p_none, p_20_cropped, p_onlymarks, p_pix2pix = axes
 
     colors = {"blue": "b", "green": "g", "red": "r", "b_white": "0.8", "m_white": "0.5", "l_white": "0.1"}
+    hue_order = ["blue", "green", "red", "b_white", "m_white", "l_white"]
 
-    sns.catplot(x="transformer", y="success_rate", hue="light", data=data[data.run == "straight"], kind="bar",
-                legend_out=False, palette=colors, legend=False)
-    sns.catplot(x="transformer", y="success_rate", hue="light", data=data[data.run == "s"], kind="bar",
-                legend_out=False, palette=colors, legend=False)
-    sns.catplot(x="transformer", y="success_rate", hue="light", data=data[data.run == "curvy"], kind="bar",
-                legend_out=False, palette=colors, legend=False)
-    sns.catplot(x="transformer", y="success_rate", hue="light", data=data, kind="bar", legend_out=False, palette=colors,
-                legend=False)
+    sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "no_ns"],
+                palette=colors, hue_order=hue_order, ax=p_none, errwidth=1.5, ci="sd")
+    p_none.legend_.remove()
+    p_none.set_title("none")
 
-    # grid = sns.FacetGrid(data=data, row="transformer", hue="light", palette=colors)
-    # grid.map(sns.barplot, "run", "success_rate")
+    sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "20_sib_cropped"],
+                palette=colors, hue_order=hue_order, ax=p_20_cropped, errwidth=1.5, ci="sd")
+    p_20_cropped.legend_.remove()
+    p_20_cropped.set_title("20 Styles")
+    p_20_cropped.set_ylabel("")
+
+    sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "only_marks"],
+                palette=colors, hue_order=hue_order, ax=p_onlymarks, errwidth=1.5, ci="sd")
+    p_onlymarks.legend_.remove()
+    p_onlymarks.set_title("Only Lanes")
+    p_onlymarks.set_ylabel("")
+
+    sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "pix2pix"],
+                palette=colors, hue_order=hue_order, ax=p_pix2pix, errwidth=1.5, ci="sd")
+    p_pix2pix.legend(bbox_to_anchor=(1, 1))
+    p_pix2pix.set_title("pix2pix")
+    p_pix2pix.set_axisbelow(True)
+    p_pix2pix.set_ylabel("")
 
     plt.show()
 
 
 def plot3(args):
     data = pandas.read_csv("/home/dominik/data/ETH/MasterThesis/data/fid_all.txt")
+    f, axes = plt.subplots(1, 1, figsize=(5, 2))
+    sns.barplot(y="Transformation", x="FID", data=data, ax=axes)
+    plt.show()
 
-    sns.barplot(x="transformer", y="fid", data=data)
+
+def plot4(args):
+    data = pandas.read_csv("/home/dominik/data/ETH/MasterThesis/data/entropy.txt")
+    f, axes = plt.subplots(1, 1, figsize=(5, 2))
+    sns.barplot(y="Transformation", x="Entropy", data=data, ax=axes)
     plt.show()
 
 
@@ -133,6 +154,8 @@ def main():
         img = plot2(args)
     elif args.which == 3:
         img = plot3(args)
+    elif args.which == 4:
+        img = plot4(args)
     else:
         raise ValueError("invalid argument: --which {}".format(args.which))
 

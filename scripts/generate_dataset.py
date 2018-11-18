@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+"""
+Extracts images from the data stored with generate_data.py or optimal_trajectory_gen.py. Applies several transformation
+to all images, if wished.
+"""
+
 import pathlib
 import random
 import argparse

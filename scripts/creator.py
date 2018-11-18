@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Creates augmented dataset to train pix2pix from only road images.
+"""
+
 import argparse
 import pathlib
 import random

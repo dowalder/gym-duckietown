@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+"""
+Aggregates images extracted from runs from logs (see analzye_logs package) and sorts them after colors into fixed size
+datasets.
+"""
+
 import pathlib
 import argparse
 import shutil

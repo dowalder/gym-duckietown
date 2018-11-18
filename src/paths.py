@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+Functions for path manipulation
+"""
+
 from pathlib import Path
 from typing import List
 

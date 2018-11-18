@@ -1,0 +1,21 @@
+#test_path: "/home/dominik/workspace/duckietown_imitation_learning/test_images"
+#train_path: "/home/dominik/workspace/duckietown_imitation_learning/train_images"
+
+#train_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/mxm_gen/train"
+#test_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/mxm_gen/test"
+
+test_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/cnn_train_long_only_road/test"
+train_path: "/home/dominik/dataspace/images/mxm_sim/zigzag_dists/cnn_train_long_only_road/train"
+
+pretrained_path: "/home/dominik/dataspace/models/mxm_sim/caffe_copy_working.pth"
+
+model_path: "/home/dominik/dataspace/models/mxm_sim/only_road"
+device: "cuda:0"
+use_resnet: true
+intervals:
+  display: 200
+  test: 1000
+  save: 5000
+num_epochs: 2000
+network: "cnn"
+pretrained: true

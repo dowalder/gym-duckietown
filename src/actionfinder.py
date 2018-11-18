@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
 """
-Actionfinder are used as controllers for when ground truth data is available. This means they have access to the
+Actionfinders are used as controllers for when ground truth data is available. This means they have access to the
 environment.
 """
 
 import abc
-import pathlib
 import random
 from typing import Optional, Dict, Any
 

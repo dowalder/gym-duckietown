@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 """
-This script generates trajectories from which a lane follower can be learned.
+This script generates trajectories from which a lane follower can be learned. All parameters need to be set through a
+conf file.
 """
 
 import argparse

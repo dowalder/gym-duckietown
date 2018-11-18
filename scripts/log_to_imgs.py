@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+
+"""
+Can be used to extract all images from a certain topic from a rosbag into a directory.
+"""
+
 import argparse
 import os
 

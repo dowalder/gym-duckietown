@@ -2,6 +2,10 @@ import re
 
 import torch
 
+"""
+Copied from https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/transformer_net.py
+"""
+
 
 class TransformerNet(torch.nn.Module):
     def __init__(self):

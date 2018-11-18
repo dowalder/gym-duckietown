@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+"""
+DEPRECATED: Only left for to keep not yet moved features.
+"""
+
 import os
 import pathlib
 import PIL.Image
@@ -14,7 +19,6 @@ import PIL.Image
 import numpy as np
 import cv2
 
-# ============= V1 ===================
 
 class DataSet(torch.utils.data.Dataset):
     """

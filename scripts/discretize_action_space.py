@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+"""
+Changes continuous actions into discrete ones. Assumes actions to be stored in .txt files containing nothing else than
+a single number.
+"""
+
 import argparse
 from pathlib import Path
 from typing import Tuple

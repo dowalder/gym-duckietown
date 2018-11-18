@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+"""
+Different parameter classes for testing, training and data generation.
+"""
+
 from pathlib import Path
 from typing import Dict, Any
 
