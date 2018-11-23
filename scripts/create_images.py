@@ -70,6 +70,7 @@ def main():
         "/home/dominik/dataspace/images/neural_style/tests/120_160/20_sib_cropped/",
         "/home/dominik/dataspace/images/neural_style/tests/120_160/manyrandom/",
         "/home/dominik/dataspace/images/neural_style/tests/120_160/style3/",
+        "/home/dominik/dataspace/images/neural_style/tests/120_160/20_sib_augmented/",
     ]
 
     image = np.ones(((len(img_names) + 1) * (120 + border) + border, len(folders) * (160 + border) + border, 3), np.uint8) * 255
@@ -79,7 +80,7 @@ def main():
             folder_name = folder.split(sep="/")[-2]
             tmp_image = create_images("/home/dominik/dataspace/images/neural_style/styles/" + folder_name)
             image[border:border + 120, hor:hor + 160] = tmp_image
-            cv2.imwrite("/home/dominik/data/ETH/MasterThesis/image/tmp/{}.jpg".format(folder_name), tmp_image)
+            cv2.imwrite("/home/dominik/data/ETH/MasterThesis/image/intermediate/{}.jpg".format(folder_name), tmp_image)
         for idx, name in enumerate(img_names):
             j = idx + 1
             ver = border + j * (120 + border)

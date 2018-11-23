@@ -103,22 +103,27 @@ def plot2(args):
                 palette=colors, hue_order=hue_order, ax=p_none, errwidth=1.5, ci="sd")
     p_none.legend_.remove()
     p_none.set_title("none")
+    p_none.set_ylabel("Success Rate")
 
     sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "20_sib_cropped"],
                 palette=colors, hue_order=hue_order, ax=p_20_cropped, errwidth=1.5, ci="sd")
     p_20_cropped.legend_.remove()
-    p_20_cropped.set_title("20 Styles")
+    p_20_cropped.set_title("20 Cropped")
     p_20_cropped.set_ylabel("")
 
     sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "only_marks"],
                 palette=colors, hue_order=hue_order, ax=p_onlymarks, errwidth=1.5, ci="sd")
     p_onlymarks.legend_.remove()
-    p_onlymarks.set_title("Only Lanes")
+    p_onlymarks.set_title("Only Markings")
     p_onlymarks.set_ylabel("")
 
     sns.barplot(x="run", y="success_rate", hue="light", data=data[data.transformer == "pix2pix"],
                 palette=colors, hue_order=hue_order, ax=p_pix2pix, errwidth=1.5, ci="sd")
     p_pix2pix.legend(bbox_to_anchor=(1, 1))
+    legend_texts = p_pix2pix.legend_.get_texts()
+    legend_texts[3].set_text("b white")
+    legend_texts[4].set_text("m white")
+    legend_texts[5].set_text("l white")
     p_pix2pix.set_title("pix2pix")
     p_pix2pix.set_axisbelow(True)
     p_pix2pix.set_ylabel("")

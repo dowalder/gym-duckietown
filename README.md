@@ -1,4 +1,4 @@
-# Gym-Duckietown
+# Gym-Duckietown 
 
 [![Build Status](https://circleci.com/gh/duckietown/gym-duckietown/tree/master.svg?style=shield)](https://circleci.com/gh/duckietown/gym-duckietown/tree/master)
 

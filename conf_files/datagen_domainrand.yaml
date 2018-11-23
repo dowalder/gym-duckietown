@@ -1,27 +1,24 @@
 model_path: "none"
 network: "none"
 
-data_path: "/home/dominik/dataspace/images/mxm_sim/udem1"
-device: "cuda:0"
-map: "udem1"
-only_road: true
-use_modifier: false
-find_road: true
-perturb_factor: 1.5
-disturb_chance: 0.0
-delta_t: 0.1
-velocity: 0.2
-num_sequences: 40
-imgs_per_sequence: 500
-action_finder: "BestDiscrete"
+data_path: "/home/dominik/dataspace/images/mxm_sim/udem1"       # Where to store the data
+device: "cuda:0"                                                # Which device, in case neural networks are used
+map: "udem1"                                                    # Map in duckietown
+only_road: true                                                 # If images without background should be stored too
+use_modifier: false                                             # Applies a random modifier to output actions
+find_road: true                                                 # Find the road before starting to record
+perturb_factor: 1.5                                             # How strongly the actions are perturbed
+disturb_chance: 0.0                                             # How likely is a perturbation of the actions
+delta_t: 0.1                                                    # Sample time
+velocity: 0.2                                                   # Forward velocity
+num_sequences: 40                                               # number of sequences to create
+imgs_per_sequence: 500                                          # number of images per sequence
+action_finder: "BestDiscrete"                                   # Which action finder to use
 
 
-additional:
+additional:                                                     # Additional key-value information pairs
   action_min: -4.0
   action_max: 4.0
   action_resolution: 201
   keep_position_after_reset: true
-
-#  network_name: "action_estimator"
-#  network_conf_file: "conf_files/actionestimator.yaml"
 
